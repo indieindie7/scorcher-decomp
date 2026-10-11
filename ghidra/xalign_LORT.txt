@@ -1,0 +1,1 @@
+0x0600576e func fx_Spawn xalign SCORWIN:00409f07 scordos:00018f02

@@ -1,0 +1,1 @@
+0x00070542 func fn_70542 xalign SCORWIN:004390b6

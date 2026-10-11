@@ -1,0 +1,6 @@
+0x0043396c func rt_fprem xalign scordos:00040ae8
+0x00432558 func snd_Disable xalign scordos:0003ae0c
+0x00432539 func snd_Enable xalign scordos:0003aded
+0x0041d9dd func hiscores_Load xalign scordos:0002c6b0
+0x0041d48c func rotback_LoadMaskPic xalign scordos:0002c19e
+0x004069dc func bigs_FixupListPtrs xalign scordos:000159dc
