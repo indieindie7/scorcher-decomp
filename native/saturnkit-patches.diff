@@ -1,0 +1,175 @@
+diff --git a/recomp/__main__.py b/recomp/__main__.py
+index 9b51f13..e175233 100644
+--- a/recomp/__main__.py
++++ b/recomp/__main__.py
+@@ -112,7 +112,7 @@ def volatile_literals(prog):
+ 
+ 
+ class Module:
+-    def __init__(self, name, path, base, seeds=(), hooks=(), overlay=False):
++    def __init__(self, name, path, base, seeds=(), hooks=(), overlay=False, landings=()):
+         self.name, self.path, self.base, self.overlay = name, path, base, overlay
+         self.hooks = frozenset(hooks)
+         self.ns = "p_" + name.lower()
+@@ -120,6 +120,10 @@ class Module:
+         self.crc = zlib.crc32(self.data)
+         self.img = sh2.Image(self.data, base)
+         self.prog = discover.Program(self.img, [base] + list(seeds))
++        # landings given by hand: a return the program makes into an outer frame that discovery's
++        # pattern does not see (a callee that branches back into its caller's loop and leaves by
++        # the caller's own return)
++        self.prog.landings = set(self.prog.landings) | {a for a in landings if a in self.prog.code}
+         self.entries = sorted(self.prog.funcs)
+         self.files, self.sites, self.unknown = [], {}, []
+         self.n_ins = self.n_calls = 0
+@@ -229,7 +233,8 @@ endif()
+ """
+ 
+ 
+-def generate(specs, out, per_file=8000, comments=True, optest=False, log=print, hooks=None, overlays=()):
++def generate(specs, out, per_file=8000, comments=True, optest=False, log=print, hooks=None, overlays=(),
++             landings=None):
+     """hooks: {program name: [address, ...]}, see --hook; overlays: program names, see --overlay."""
+     hooks = hooks or {}
+     overlays = set(overlays)
+@@ -245,7 +250,7 @@ def generate(specs, out, per_file=8000, comments=True, optest=False, log=print,
+     modules = []
+     for name, path, base, seeds in specs:
+         t = time.time()
+-        m = Module(name, path, base, seeds, hooks.get(name, ()), name in overlays)
++        m = Module(name, path, base, seeds, hooks.get(name, ()), name in overlays, (landings or {}).get(name, ()))
+         m.generate(out, per_file, comments, log)
+         missing = m.hooks - {a for f in m.prog.funcs.values() for a in f.code}
+         if missing:
+@@ -301,14 +306,20 @@ def main(argv=None):
+     ap.add_argument("--optest", action="store_true", help="add saturnkit's instruction test module")
+     ap.add_argument("--hook", action="append", default=[], help="NAME:ADDR,...: sh2_hook after these instructions")
+     ap.add_argument("--overlay", action="append", default=[], help="NAME,...: programs called at their base, that return")
++    ap.add_argument("--landing", action="append", default=[],
++                    help="NAME:ADDR,...: addresses returned to without a call of their own (longjmp-like)")
+     a = ap.parse_args(argv)
+     hooks = {}
+     for h in a.hook:
+         name, _, addrs = h.partition(":")
+         hooks.setdefault(name, []).extend(int(x, 16) for x in addrs.split(",") if x)
+     overlays = [n for o in a.overlay for n in o.split(",") if n]
++    landings = {}
++    for h in a.landing:
++        name, _, addrs = h.partition(":")
++        landings.setdefault(name, []).extend(int(x, 16) for x in addrs.split(",") if x)
+     generate([parse_spec(s) for s in a.programs], a.out, a.per_file, not a.no_comments, a.optest, hooks=hooks,
+-             overlays=overlays)
++             overlays=overlays, landings=landings)
+ 
+ 
+ if __name__ == "__main__":
+diff --git a/runtime/machine.cpp b/runtime/machine.cpp
+index 8ca11a2..686aaa1 100644
+--- a/runtime/machine.cpp
++++ b/runtime/machine.cpp
+@@ -319,10 +319,12 @@ void sh2_poll(SH2Context& c) {
+     c.budget = kBudget;
+     if (c.cpu == 1) {
+         if (++g_slave_polls >= kSlaveSlice) to_master();
++        onchip_frt_interrupt(c);
+         return;
+     }
+     g_poll_ring[g_poll_pos++ % 4096] = __builtin_return_address(0);
+     advance(c, g_vtime + kBudget * kNsPerSafePoint);
++    onchip_frt_interrupt(c);
+ }
+ 
+ static int g_irq_active = -1;
+@@ -343,7 +345,16 @@ void sat_interrupt(SH2Context& c, uint32_t vec, uint32_t level) {
+     } else {
+         c.pc = 0;
+         sh2_call(c, target);
+-        if (c.pc != kIntPC) sat_fatal("interrupt %02X: handler %08X did not rte (went to %08X)", vec, target, c.pc);
++        // An rte into another context (a task the handler starts by pushing its own SR and PC, as
++        // a timer-driven background thread does): run it here, nested in the interrupt, until the
++        // code gets back to the interrupted context, as the hardware would.
++        for (int hops = 0; c.pc != kIntPC; ++hops) {
++            uint32_t to = c.pc;
++            if (hops >= 64 || !sh2_lookup(to & 0x1FFFFFFFu))
++                sat_fatal("interrupt %02X: handler %08X did not rte (went to %08X)", vec, target, to);
++            c.pc = 0;
++            sh2_call(c, to);
++        }
+     }
+     int32_t budget = c.budget;
+     c = saved;
+diff --git a/runtime/onchip.cpp b/runtime/onchip.cpp
+index 960aad1..58014c9 100644
+--- a/runtime/onchip.cpp
++++ b/runtime/onchip.cpp
+@@ -47,6 +47,18 @@ void onchip_input_capture(int cpu) {
+     o.regs[0x18] = f >> 8; o.regs[0x19] = (uint8_t)f;   // FICR
+ }
+ 
++// The FRT's input-capture interrupt, for a program that takes SINIT/MINIT as an interrupt (TIER's
++// ICIE) instead of polling FTCSR: while ICF is set it is raised at the level in IPRB bits 11-8 with
++// the vector in VCRC bits 14-8, and the handler clears ICF.
++bool onchip_frt_interrupt(SH2Context& c) {
++    OnChip& o = g_oc[c.cpu];
++    if (!(o.regs[0x11] & 0x80) || !(o.regs[0x10] & 0x80)) return false;
++    uint32_t level = o.regs[0x60] & 0x0F;
++    if (level <= c.imask) return false;
++    sat_interrupt(c, o.regs[0x66] & 0x7F, level);
++    return true;
++}
++
+ static void divide(OnChip& o, bool wide) {
+     int32_t dvsr = (int32_t)rd(o, 0x100, 4);
+     int64_t n = wide ? (int64_t)((uint64_t)rd(o, 0x110, 4) << 32 | rd(o, 0x114, 4)) : (int32_t)rd(o, 0x104, 4);
+@@ -105,7 +117,7 @@ uint32_t onchip_read(SH2Context& c, uint32_t a, int size) {
+         return off == 0x12 ? f >> 8 : f & 0xFF;
+     }
+     uint32_t v = rd(o, off, size);
+-    if (off == 0x11 && size == 1) {         // FTCSR: a slave waiting here has nothing to do
++    if (off == 0x11 && size == 1 && !(o.regs[0x10] & 0x80)) {   // FTCSR: a slave polling here (no ICI) has nothing to do
+         slave_idle_check(v);
+         v = rd(o, off, size);
+     }
+diff --git a/runtime/saturn.h b/runtime/saturn.h
+index d9a84e3..9130115 100644
+--- a/runtime/saturn.h
++++ b/runtime/saturn.h
+@@ -124,6 +124,7 @@ uint32_t onchip_read(SH2Context& c, uint32_t a, int size);
+ void onchip_write(SH2Context& c, uint32_t a, uint32_t v, int size);
+ void onchip_input_capture(int cpu);   // SINIT/MINIT: the FRT's input-capture flag
+ void onchip_reset(int cpu);
++bool onchip_frt_interrupt(SH2Context& c);   // the FRT input-capture interrupt (TIER.ICIE), if raised and unmasked
+ 
+ // ---- video (video.cpp; vdp1.cpp, vdp2.cpp, host.cpp through video.h) --------------------------
+ void video_init();
+diff --git a/runtime/vdp1.cpp b/runtime/vdp1.cpp
+index b5aec0e..5ba293d 100644
+--- a/runtime/vdp1.cpp
++++ b/runtime/vdp1.cpp
+@@ -704,6 +704,11 @@ static void reg_write(uint32_t off, uint16_t v) {
+     sat_trace("VDP1 reg %02X <- %04X (pr %08X)", off, v, g_cpu->pr);
+     if (r >= EDSR) return;                       // read-only
+     g_reg[r] = v;
++    // MODR mirrors the mode bits (VER 1, PTM1, EOS, DIE, DIL, FCM, VBE, TVM); Scorcher's
++    // VDP1 init loops until (MODR & 0x178) == 0x10, the FCM it set through FBCR.
++    g_reg[MODR] = (uint16_t)(0x1000 | (g_reg[TVMR] & 0xF) | ((g_reg[FBCR] >> 1) & 1) << 4
++                  | ((g_reg[FBCR] >> 2) & 1) << 5 | ((g_reg[FBCR] >> 3) & 1) << 6
++                  | ((g_reg[FBCR] >> 4) & 1) << 7 | ((g_reg[PTMR] >> 1) & 1) << 8);
+     switch (r) {
+     case FBCR:
+         if ((v & 3) == 3) g_change_pending = true;
+diff --git a/runtime/video.cpp b/runtime/video.cpp
+index 55c80cb..8ac7bcd 100644
+--- a/runtime/video.cpp
++++ b/runtime/video.cpp
+@@ -41,6 +41,10 @@ static void set16(uint8_t* r, uint32_t o, uint16_t v) { r[o] = v >> 8; r[o + 1]
+ 
+ void video_init() {
+     vdp1_init();
++    // What the BIOS leaves in VDP2 after its boot screen and a program relies on without writing:
++    // NBG0/NBG1's coordinate increments at 1.0 (ZMXIN/ZMYIN), else every dot reads one point.
++    set16(g_vdp2_regs, 0x78, 1); set16(g_vdp2_regs, 0x7C, 1);
++    set16(g_vdp2_regs, 0x88, 1); set16(g_vdp2_regs, 0x8C, 1);
+     if (!host_open()) sat_fatal("no window");
+ }
+ 
