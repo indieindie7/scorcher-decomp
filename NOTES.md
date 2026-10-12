@@ -1519,3 +1519,4 @@ un18 (4000 VBlanks): dead-tree horizon (RBG1) now drawn above the sky; the groun
   The WAVs come from tools\ripaudio.py on the CloneCD cue (8 audio tracks, track02..09, 361-586 s). Local only, never commit.
 - DirectSound init works on Win11 (0x46a940 = 1, primary format 22050 Hz 16-bit mono at 0x441a04).
 - Test tools: tools\capwin.py CLASS out.png (PrintWindow), tools\sendkeys.py CLASS steps (PostMessage keys, wait:ms, shot:file), tools\disw.py EXE VA N (capstone).
+- Pushed 10-12: github.com/indieindie7/scorcher-decomp commit 49c789b (pcwin/ddraw source, 8 new tools, saturnkit-patches.diff refresh, native/game, launchers, NOTES). .gitignore now also blocks *.wav, pcwin/music/, *.dll, *.png.
