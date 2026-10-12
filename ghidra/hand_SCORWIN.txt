@@ -809,8 +809,8 @@
 0x00425244 func menu_SoundOptionsPage hand DB4 SCORWIN twin of scordos 0x33e0c menu_SoundOptionsPage: three toggles, cd_Stop/cd_PlayTrack, hilite 0043ea98 = DOS 65b8 +0x38
 0x0042549a func menu_RowBackHandler hand DB4 SCORWIN twin of scordos 0x34099 menu_RowBackHandler: 201 b = DOS menu_ResetHilite 34074 (37) + menu_RowBackHandler (164) merged; row 0 menu_Pop, row 4 pop twice + "title"
 0x00425563 func menu_ViewOptionsPage hand DB4 SCORWIN twin of scordos 0x3413d menu_ViewOptionsPage: menu_Draw3Way 0xbe/0x106/0x143 + two inverted toggles, hilite 0043eaa8
-0x00432343 func mem_ResetMarks hand DB4 SCORWIN twin of scordos 0x4065f mem_ResetMarks: zeroes 3 counters and reads clock (61 b both); win timer table DAT_00468354; twin only by size/shape
-0x00432380 func dbg_ShowTimers320 hand DB4 SCORWIN twin of scordos 0x40415 dbg_ShowTimers320: "frmrate" + "tid %-16s" text lines (win version, 56 b vs DOS 219); name from existing win comment
+0x00432343 func dbg_ResetTimers hand DB4 SCORWIN twin of scordos 0x4065f mem_ResetMarks: zeroes 3 counters and reads clock (61 b both); win timer table DAT_00468354; twin only by size/shape | Q: checked: zeroes DAT_00468354/58/5c and stamps dbg_ReadClock into DAT_00468360 = the profiler reset (DOS 0x4065f); not a heap mark
+0x00432380 func dbg_ShowTimers320 hand DB4 SCORWIN twin of scordos 0x40415 dbg_ShowTimers320: "frmrate" + "tid %-16s" text lines (win version, 56 b vs DOS 219); name from existing win comment | Q: checked: confirmed, called by eng_LoopIter8bpp 00411d99 between vid_LockFrameBuffer and ddraw_PresentFrame
 0x00433986 func rt_FpremThunk hand DB4 no DOS twin: 16 b thunk calling rt_fprem
 0x00433fc8 func rt_FloatToFixedBitsThunk hand DB4 no DOS twin: 16 b thunk calling rt_FloatToFixedBits 00433e72 (16 b)
 0x00435424 func rt_ExpPrefix hand DB4 no DOS twin: x87 stub right before rt_ExpCore: compare st0 vs DAT_00456328, ROUND, f2xm1, fscale (exp body); cautious name
@@ -820,6 +820,6 @@
 0x00438aba func rt_AllocStreamNode hand DB4 no DOS twin: Watcom CRT, takes a free FILE slot of static table 004564a4 (0x1a each) else rt_malloc, links on DAT_0046abb8; counterpart of rt_ReleaseStreamNode
 0x00401e7f func dbg_DrawHeapBar hand DB4 = DOS dbg_DrawHeapBar 00010e7f (push 0x2d8 __CHK prologue): a 320-short row buffer filled with a colour, marks each heap block span in another colour, copies the row 5 times into the screen at DAT_004570a4
 0x00423ac8 func menu_KeyBindPageTail hand DB4 no refs in SCORWIN (dead): DOS twin is the in-body block 0x32678 of menu_KeyBindingPage; when no menu is open and key byte +0xd of DAT_004571e0 is 1, opens the menu (menu_DrawRowsClipX 0xeb, 0x280); clears DAT_0045d858 when keys +8/+0xd/+0x1b/+0x26/+0x28 are all up
-0x00434118 func rt_GetThreadDataDA hand DB4 Watcom CRT: returns __GetThreadPtr (PTR_rt_GetThreadPtrDefault_00456240) + 0xda, the per-thread field used by rt_InitThreadData
+0x00434118 func rt_GetThreadDataDA hand DB4 Watcom CRT: returns __GetThreadPtr (PTR_rt_GetThreadPtrDefault_00456240) + 0xda, the per-thread field used by rt_InitThreadData | Q: checked: confirmed (__GetThreadPtr + 0xda)
 0x004371ce func rt_GetConsoleHandlesInit hand DB4 Watcom CRT: rt_OpenConsoleHandles then returns DAT_00456488
 0x00438a4f func rt_SetErrnoFromRc hand DB4 Watcom CRT (value, rc): rc 0 returns value; else maps the OS code (0x7b -> 1, 0xce -> 9, 0xb7 -> 7, else table DAT_004566b5 clamped at 0x13) through rt_SetErrno and returns -1; sibling of rt_SetErrnoFromWin32
