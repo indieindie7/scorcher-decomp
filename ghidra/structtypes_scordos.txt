@@ -1,0 +1,5 @@
+# struct types for Scorcher DOS globals (ApplyGlobals.java; structs in /Scorcher from MAINENG.ASC)
+0x000a64b8 g_CamCameraRamPtr CameraRAM*   # PTR_DAT_000a64b8 = CAMRAM 0x11c (284) block, freecam_Init/endseqcam_Init world_AllocSubLinked(..., &PTR_DAT_000a64b8, 0x11c, CAMRAM, 1, CameraRAM); +0xec view, +0x30 fov
+0x000bf80c g_EngCtx seqptrs*   # eng_PushContext 0x12f3d: 0x154-byte (340) SEQPTR context, +0x34 previous, DAT_000bf80c = current pointer
+0x000c0b80 g_CamWorld WorldRAMHeader*   # endseqcam_Init mem_AllocRaw(&DAT_000c0b80, 0xbc, CAMWORLD); 0xbc = WorldRAMHeader size, pos +0x20 and matrix +0x5c as in cam_BuildFrameCamera / NOTES
+0x000c0cf8 g_CarPlayerWorld WorldRAMHeader*   # NOTES 242 bilstyring init: DAT_000c0cf8 = this world (routine world param = WorldRAMHeader); weaker evidence

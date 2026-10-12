@@ -1,0 +1,5 @@
+# struct types for Scorcher Saturn globals (twins of structtypes_scordos.txt by globals name)
+0x060fcae0 g_CamCameraRamPtr CameraRAM*
+0x060fcb4c g_EngCtx seqptrs*
+0x060fcc48 g_CamWorld WorldRAMHeader*
+0x060faa5c g_CarPlayerWorld WorldRAMHeader*

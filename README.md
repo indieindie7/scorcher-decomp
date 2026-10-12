@@ -15,7 +15,8 @@ Non-commercial, done for study and preservation.
 | `ghidra/funcinfo_*.tsv` | per-function export: address, name, size, callees, string references |
 | `ghidra/xalign_*.txt`, `sig_*.txt`, `restore_*.txt` | cross-build alignment and Watcom runtime signature lists |
 | `ghidra/globals_*.txt` | global variable labels (`0x<addr> <name>`, apply with `scripts/ApplyGlobals.java`): DOS 1126, Win95 832, Saturn 475 variables + 1363 `p_<name>` literal-pool slots; names with an address suffix are best guesses. The naming tools are in the amok-decomp repo (`tools/`) |
-| `ghidra/types_*.txt` | struct / data types for globals from the `MAINENG.ASC` layouts |
+| `ghidra/types_*.txt` | function signatures (parameter and return types) |
+| `ghidra/structtypes_*.txt` | globals typed with the `MAINENG.ASC` structs (import them with `scripts/ImportMainengStructs.java`, then apply with `ApplyGlobals.java`) |
 | `ghidra/x86watcom.cspec` | compiler spec for the Watcom register calling convention |
 | `ghidra/scripts/*.java` | headless Ghidra scripts: find function starts, repair bodies, apply names, export, dump decompilation |
 | `ghidra/decomp/*.c` | decompiler dumps of selected routines (routine table, wl3 loaders) |

@@ -1,0 +1,3 @@
+# struct types for Scorcher Win95 globals (twins of structtypes_scordos.txt by globals name)
+0x00457064 g_EngCtx seqptrs*
+0x00458408 g_CamWorld WorldRAMHeader*
