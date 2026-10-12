@@ -56,7 +56,10 @@ public class ApplyGlobals extends GhidraScript {
       if (s != null && s.getSource() == SourceType.USER_DEFINED && !s.getName().equals(p[1]) && s.getSymbolType() == SymbolType.FUNCTION) {
         println("skip function at " + p[0] + " (" + s.getName() + ")"); bad++; continue;
       }
-      Symbol ns = createLabel(ad, p[1], true, SourceType.USER_DEFINED);
+      // an earlier pass's label is renamed in place (createLabel would keep the old name as a second label)
+      if (s != null && s.getSource() == SourceType.USER_DEFINED && s.getSymbolType() == SymbolType.LABEL)
+        s.setName(p[1], SourceType.USER_DEFINED);
+      else createLabel(ad, p[1], true, SourceType.USER_DEFINED);
       named++;
       if (dt != null) {
         try {
