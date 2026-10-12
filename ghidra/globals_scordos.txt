@@ -1,0 +1,249 @@
+0x000a6484 g_FileDataRootPtr pointer # default data root, copied into prefix used by loader sprintf
+0x000a648c g_EngTickLen16 - # dt/33 as 16.16 frame length in ticks
+0x000a6490 g_EngSpriteCountPtr pointer # PTR to sprite count used by rend_LatchSpriteList
+0x000a6498 g_ExtFreeIdList - # ext_NewId free-id list
+0x000a649c g_WorldFreeQueue - # worlds queued for world_FreeQueued
+0x000a64a0 g_EngRoutineHash - # hash of rout_ entries
+0x000a64a4 g_EngAllocTabList - # atab_Register list for teardown
+0x000a64b8 g_CamCameraRamPtr CameraRAM* # PTR to CAMRAM 0x11c block
+0x000a64e0 g_VidNoClearFlag - # vid_ClearWorkBuffer skipped when set
+0x000a64e4 g_MemReleaseMode - # ==1 release mode pool alloc
+0x000a64e8 g_FileGameDirFlag - # game-directory flag path_InGameDir
+0x000a64f0 g_MemPoolPtr pointer # PTR used by mem_PoolAlloc release mode
+0x000a64fc g_TexPixelHeapTag pointer # PTR tag for tex_AllocPixels
+0x000a6508 g_TexAllocDataTabCap int # pool capacity =500
+0x000a650c g_TexDepackRowBudget - # row budget for tex_DepackTick
+0x000a6510 g_TexHeapThresholds - # free texture heap thresholds table
+0x000a6520 g_TexDepackRowTable - # depack rows per threshold
+0x000a6574 g_CamFovTarget - # Tab toggles 0x31c7/0x4000
+0x000a65f8 g_SysOptionsFileName - # temp:\scordos.bin options file name
+0x000a65fc g_SysConfigDefaults - # 0x26-dword config defaults/options block
+0x000a6600 g_CtlKeyBind0 - # key binding 0 (Up)
+0x000a6604 g_CtlKeyBind1 - # keybind_Set1
+0x000a6608 g_CtlKeyBind2 - # keybind_Set2
+0x000a660c g_CtlKeyBind3 - # keybind_Set3
+0x000a6610 g_CtlKeyBind4 - # keybind_Set4
+0x000a6614 g_CtlKeyBind5 - # keybind_Set5
+0x000a6618 g_CtlKeyBind6 - # keybind_Set6
+0x000a661c g_CtlKeyBind7 - # keybind_Set7
+0x000a6620 g_MenuPlayedCdTrack - # played CD track
+0x000a6624 g_MenuCdMusicOn - # CD music toggle
+0x000a6630 g_LevelGameFinished - # shows pokal trophy when game finished
+0x000a6634 g_VidHiResOption - # 640x480x16 option
+0x000a663c g_VidReqWidth - # vid_SelectMode width
+0x000a6640 g_VidReqHeight - # vid_SelectMode height
+0x000a6644 g_VidReqBpp - # bpp choice
+0x000a6650 g_LevelGameMode - # 1 campaign, 2 no enemy cars
+0x000a6658 g_LevelCampaignIndex - # index into next-level table
+0x000a6660 g_ScoreLapsDone - # laps done
+0x000a6664 g_MenuCurrentTrack - # current track selection
+0x000a6668 g_MenuNameBuf - # hi-score name buffer
+0x000a666c g_CamViewOption - # 0..2 view option
+0x000a668c g_MenuCheatFlags - # cheat bits via names/XYXZY
+0x000a6694 g_LevelNextLevelTable pointer # PTR table of next level names
+0x000a66b0 g_MenuKeyNames - # key names stride 0xc
+0x000a70d4 g_MenuTrackCdBytes - # CD track byte per level
+0x000a76e0 g_RotbackHorizonRow - # horizon row
+0x000a76e4 g_ScoreDefaultsBlockA - # default 0x18 dwords for best-times block
+0x000a7744 g_ScoreDefaultsBlockB - # default 0xf dwords
+0x000a7780 g_ScoreDefaultsBlockC - # default 0x5a dwords best-times
+0x000a78e8 g_ScoreDefaultsBlockD - # default 0x5a dwords best-times
+0x000a7c9c g_MenuCdTrackRowTable - # menu_CdTrackPage row table stride 0x18
+0x000a8174 g_MenuDefaultKeys - # 20 default keys keybind_FirstFree
+0x000a81e4 g_MenuWbgColours - # WBG gradient colours
+0x000a8262 g_MenuWbgRamp - # WBG gradient ramp index
+0x000a82e4 g_MenuScrollPositions - # 6 positions menu_ScrollSelector
+0x000a82fc g_MenuPageItemsTable pointer # PTR pages table (items)
+0x000a8300 g_MenuPagePictures pointer # PTR page pictures
+0x000a8648 g_MenuOptPageTable pointer # PTR options page tables
+0x000a8684 g_MenuKeyRepeatDelay - # repeat delay =10 frames
+0x000a86d4 g_CamEndSeqState pointer # PTR camera state block +4 eye +0x10 target +0x1c matrix
+0x000a86d8 g_LevelTrophyIndex - # -1 = no trophy
+0x000a9090 g_SndCdVolume - # cd_SetVolume(x*0x7ff)
+0x000a9094 g_SndEnabled - # sound enabled flag snd_Disable/Enable
+0x000a9098 g_VidModeTable - # mode table stride 0x1f
+0x000a90a2 g_VidModeTable13h - # 31-byte mode table for SetMode13h
+0x000a92d4 g_DbgTextCols - # debug text grid cols
+0x000a92d8 g_DbgTextRowEnd - # text scroll end row
+0x000a92e0 g_DbgTextRowStart - # text scroll start row / timer slots
+0x000a92e4 g_DbgGlyphFont - # 3x5 glyph bitmaps stride 8
+0x000bdec0 g_EngRandomTable pointer # PTR 512-entry random table (shorts)
+0x000bdec4 g_EngSineTable pointer # PTR quarter-wave sine table
+0x000bdecc g_RtStackSeg - # stack segment for stack overflow check
+0x000bdee1 g_RtFpuType - # FPU type
+0x000bdef4 g_AilStarted - # AIL started flag
+0x000bdef0 g_AilLockInitDone - # once-only init done
+0x000bdef8 g_AilLockMemoryDone - # ail_LockMemory once flag
+0x000bdf5c g_AilTimerActive - # 4x16 AIL timer table active
+0x000bdf9c g_AilTimerAccum - # AIL timer accumulators table
+0x000bdfdc g_AilTimerPeriods - # AIL timer periods table
+0x000be0be g_AilTimerDivisor - # AIL_API_interrupt_divisor
+0x000be0c2 g_AilTimerCurrent - # current timer period
+0x000be0c6 g_AilInBackground - # MSS background flag
+0x000be0ca g_AilLockCount - # AIL_lock count
+0x000beafc g_RtArgc - # argc
+0x000beb00 g_RtArgv - # argv
+0x000beb0c g_RtCmdLine - # command line
+0x000beb08 g_RtBreakTop - # break / memory top
+0x000beb18 g_RtStackLimit - # stack overflow limit
+0x000beb28 g_RtConPushback - # console pushback char
+0x000beb34 g_RtNo87Flag - # NO87 flag
+0x000beb98 g_AilFileError - # AIL file error code
+0x000beb9c g_AilAllocHook - # memory allocator hook
+0x000beba0 g_AilFreeHook - # free hook
+0x000bebac g_AilSprintfVec - # ail_Sprintf vector
+0x000becb0 g_AilServeReentry - # reentrancy flag ail_ServeDriverOnce
+0x000bed3c g_AilDigLockFlag - # ail_DigLockRegions once flag
+0x000bedc4 g_AilMdiServeGuard - # reentry guard XMIDI timer service
+0x000bee08 g_RtFileTable - # FILE table
+0x000bf0cc g_RtAmblksiz - # _amblksiz
+0x000bf0d0 g_RtEnviron - # environ
+0x000bf1f8 g_RtNFiles - # _NFiles
+0x000bf24c g_RtIoModeTable - # PTR iomode table 16 bytes/handle
+0x000bf280 g_RtDbcsFlag - # DBCS flag
+0x000bf3a0 g_RtDpmiCache - # cached DPMI detect
+0x000bf7c0 g_EngRandomIndex - # index into random table
+0x000bf7c4 g_EngSmoothFrameMs - # smoothed frame time
+0x000bf7c8 g_EngLastFrameTime - # time of last frame
+0x000bf7d4 g_EngTickIndex - # current tick index in RateLoop
+0x000bf7d8 g_EngTickCount - # RateLoop ticks to run this frame
+0x000bf7ec g_RendDrawnObjCount - # drawn object count
+0x000bf7f4 g_EngStackBase - # 0x2000 guard stack base
+0x000bf7fc g_EngPreInitReason - # 1 modified/2 fresh load PreInit reason
+0x000bf80c g_EngCtx - # engine context ctx +0x130 game ms
+0x000bf814 g_CamFovParam - # fov global in cam projection
+0x000bf820 g_EngLevelStack - # level stack
+0x000bf824 g_EngPendingLevelName - # next level name (menu_SetNext)
+0x000bf84c g_VidWorkBuffer - # SCRBUF work buffer
+0x000bf854 g_VidWorkWidth - # work buffer width
+0x000bf858 g_VidWorkHeight - # work buffer height
+0x000bf85c g_RendScreenCenterX - # screen centre x
+0x000bf860 g_RendScreenCenterY - # screen centre y
+0x000bf864 g_RendFrameWorkBlock - # frame work block 0x70 bytes
+0x000bf868 g_RendDepthBuckets - # 0x4000-byte depth buckets
+0x000bf988 g_CtlKeyStates - # raw key state array
+0x000bf994 g_EngState - # engine state
+0x000bf9a8 g_EngOptionsLoaded - # options saved flag
+0x000bf9e0 g_EngCallCount - # call counter
+0x000bf9e8 g_VidDirtyRectList - # dirty rect list
+0x000bf9f0 g_PalColourMap - # cmp table
+0x000bf9f4 g_PalLevelPalette - # level palette
+0x000bf9f6 g_ColShiftB - # channel shift 16.16
+0x000bf9fa g_ColShiftG - # channel shift 16.16
+0x000bf9fe g_ColShiftR - # channel shift 16.16
+0x000bfa28 g_TexFreeHeapBytes - # free texture heap bytes
+0x000bfa60 g_ExtStructTable - # packed struct name table
+0x000bfa64 g_ExtLinkTable - # id -> link table
+0x000c0a64 g_ExtIdCount - # id count max 0x400
+0x000c0a6c g_ColConvertTable - # col_BuildConvertTable table
+0x000c0a70 g_TexGouraudMulTable - # GRDMUL 32x32 table
+0x000c0a74 g_TexBlitTable - # blitter table
+0x000c0b04 g_TexDepackSuspended - # depack suspended flag
+0x000c0b08 g_TexDepackSpreadBuf - # 10x10 spread buffer
+0x000c0b80 g_CamWorld - # camera world
+0x000c0b84 g_EngDeltaMs - # dt
+0x000c0b88 g_RendSpriteList - # sprite list ctx+0x124
+0x000c0b8c g_RendSpriteCount - # sprite count
+0x000c0b94 g_TrackNodeEnd - # end of segment nodes
+0x000c0b98 g_TrackNodeFirst - # first node
+0x000c0bf4 g_MenuNameKey - # pressed key in name editor
+0x000c0bf8 g_MenuNameCursor - # name cursor index
+0x000c0bfc g_MenuNameBlink - # blink counter
+0x000c0c08 g_MenuTextEntryCursor - # text entry cursor
+0x000c0c0c g_MenuBlinkCounter - # blink counter
+0x000c0c10 g_CamOrbitFrames - # intro camera orbit frames
+0x000c0c18 g_ExtSpriteTable - # sprite table 0x168
+0x000c0c1c g_SysConfigSaved - # saved copy of config
+0x000c0cb4 g_MenuCheatKeyRing - # cheat key ring 16
+0x000c0cc4 g_MenuCheatKeyIndex - # ring index
+0x000c0cc8 g_MenuCheatLastKey - # last key
+0x000c0ccc g_TrackLength - # segment count/track length
+0x000c0cd0 g_CamDepthTable - # DEPTHTAB
+0x000c0cd4 g_CamIntroMode - # intro camera flag
+0x000c0cd8 g_TrackWallMap - # debug lane wall map
+0x000c0cdc g_TrackSegmentTable - # segment table
+0x000c0ce4 g_PathBlock - # path block / car list
+0x000c0ce8 g_CarAutodrive - # 1 = AI drive
+0x000c0cec g_CarInputOff - # disables input
+0x000c0cf8 g_CarPlayerWorld - # player car world
+0x000c0d00 g_CarEngineTargetVol - # target volumes
+0x000c0d64 g_CarEngineCurVol - # current volumes
+0x000c0ddc g_PathSegmentRecIndex - # per segment record index
+0x000c1d7c g_PathRecBuffer - # recorded point buffer
+0x000c5bfc g_ScoreLapTimes - # lap times / freeze flag
+0x000c5c00 g_ScoreResultLaps - # lap times array
+0x000c5c28 g_ScoreTable0 - # hiscore table ptr +0
+0x000c5c2c g_ScoreTableOverall - # overall
+0x000c5c30 g_ScoreTableBestTotal - # best total
+0x000c5c34 g_ScoreTableBestLap - # best-lap 0x3c per level
+0x000c5c38 g_ScoreHiscoreBlock - # HISCORES block
+0x000c5c3c g_ScoreCountdown - # countdown
+0x000c5c44 g_MenuDrawScr - # DRAWSCR
+0x000c5c48 g_MenuDirtyRows - # dirty rows 640
+0x000c5ed8 g_MenuLogoCounter - # logo counter
+0x000c5fc4 g_MenuGreMapPalette - # GREMAP colour table
+0x000c5fc8 g_MenuFont - # menu font record
+0x000c5fcc g_MenuTitleSel - # TITLESEL 0x54-byte state record
+0x000c6080 g_MenuHiscoreRows - # hiscore name page rows
+0x000c608c g_MenuHiscoreTable - # name page table
+0x000c6090 g_InstallState - # install_Display state machine
+0x000c60d0 g_InstallDefaultPath - # default install path c:\Games\Scorcher\
+0x000c6138 g_CamFollowState - # moincam follow camera state pos/vel
+0x000c613c g_CamViewBlend - # blend 0..0x10000 (0x10000 = in-car)
+0x000c614c g_FileTagFileName - # tag file "tagden.bin"
+0x000c61ec g_FileRootPrefix - # path_InGameDir root prefix
+0x000c6294 g_CtlLastKey - # last pressed key index
+0x000c6298 g_EngQuitFlag - # quit flag
+0x000c629c g_CtlKeyArray - # 256-byte key array
+0x000c6308 g_VidEnumModeCursor - # mode enum cursor
+0x000c630c g_DosLowBlockSegs - # segments of DOS low blocks
+0x000c650a g_DosLowBlockSels - # selectors of low blocks
+0x000c6148 g_DosLowBlockCount - # count of low blocks
+0x000c6708 g_CdPresent - # CD present flag
+0x000c670a g_CdCurrentTrack - # current CD track
+0x000c670c g_CdPlaying - # CD playing
+0x000c6714 g_SndPitchTable - # 88 pitch steps
+0x000c6874 g_SndSampleBank - # sample bank 3 banks x 88 keys x 0x14
+0x000c7d14 g_SndOn - # sound on flag
+0x000c7d1c g_SndChannelCount - # channel count
+0x000c7d20 g_SndChannelBusy - # busy flags per channel
+0x000c7d60 g_SndChannels - # 16 channels
+0x000c7da0 g_SndBankData - # loaded sample bank
+0x000c7da4 g_CdRequestHeader - # MSCDEX request header
+0x000c7da8 g_CdPlayHeader - # play header
+0x000c7dac g_CdDiscInfo - # disc info
+0x000c7db8 g_CdTrackInfo - # track info
+0x000c7dcc g_CdDrive - # CD drive
+0x000c7dcd g_CdFirstTrack - # first track
+0x000c7dce g_CdLastTrack - # last track
+0x000c7ddc g_CdLeadOutFrame - # lead-out frame
+0x000c7de0 g_CdTickCounter - # cd tick counter
+0x000c7de8 g_VidPixelDoubling - # pixel doubling flag
+0x000c7e1c g_VidModeFlag - # mode flag
+0x000c7e28 g_VidLinearVga - # VGA 320x200 linear path flag
+0x000c7e2c g_VidWidth - # screen width
+0x000c7e30 g_VidHeight - # screen height
+0x000c7e34 g_VidBitsPerPixel - # bpp
+0x000c7e3c g_VidOldBiosMode - # old BIOS mode
+0x000c7e3e g_EngMainLoopExit - # main loop exits when ==1
+0x000c7e42 g_VidBytesPerPixelFx - # >>16 = bytes per pixel
+0x000c7e54 g_VidPageOffsetA - # page offset A
+0x000c7e58 g_VidPageOffsetB - # page offset B
+0x000c7e6c g_VidVesaModeInfo - # ModeInfoBlock buffer
+0x000c7e70 g_VidVesaInfo - # VbeInfoBlock
+0x000c7e74 g_VidModeIndex - # mode table index
+0x000c7f30 g_FileMapPrefixBuf - # file_MapPrefix result buffer
+0x000c7fd0 g_FileTagTotal - # TOTAL tag table
+0x000c7fd4 g_DbgTextGrid - # debug text grid 200 chars per row
+0x000d2054 g_MemDebugAllocCount - # debug alloc list count
+0x000d205c g_MemDebugAllocList - # debug alloc list
+0x000d2060 g_DbgTimerCount - # profiler timer count
+0x000d2064 g_DbgTimerNesting - # nesting index
+0x000d2070 g_DbgTimerTable - # 30 x 0x14 timer table
+0x000d2458 g_DbgTimerNestStack - # nesting stack
+0x000d3e54 g_AilApiNesting - # API nesting depth
+0x000d3e58 g_AilDebugLogOn - # debug log on
+0x000d3f30 g_AilErrorBuf - # AIL_error buffer
+0x000d4364 g_RtOpenStreamList - # open stream list
+0x000d4360 g_RtSpareStreamList - # spare list
+0x000d436c g_RtErrno - # errno
