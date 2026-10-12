@@ -1,8 +1,19 @@
 diff --git a/recomp/__main__.py b/recomp/__main__.py
-index 9b51f13..e175233 100644
+index 9b51f13..1d9bfb6 100644
 --- a/recomp/__main__.py
 +++ b/recomp/__main__.py
-@@ -112,7 +112,7 @@ def volatile_literals(prog):
+@@ -108,11 +108,18 @@ def volatile_literals(prog):
+         for t in (v, v & ~1, v & ~3, (v & ~1) - 2):
+             if t in pools and t <= v < t + pools[t]:
+                 out.add(t)
++        # a literal pointing at data among the code is the base of a block that
++        # hand-written assembly stores into by displacement (`mov.l rN,@(12,rB)`):
++        # the pool slots in reach of mov.l's displacement (60 bytes) after it
++        if v not in prog.code:
++            for t in range(v & ~1, v + 64, 2):
++                if t in pools:
++                    out.add(t)
+     return out
  
  
  class Module:
@@ -11,7 +22,7 @@ index 9b51f13..e175233 100644
          self.name, self.path, self.base, self.overlay = name, path, base, overlay
          self.hooks = frozenset(hooks)
          self.ns = "p_" + name.lower()
-@@ -120,6 +120,10 @@ class Module:
+@@ -120,6 +127,10 @@ class Module:
          self.crc = zlib.crc32(self.data)
          self.img = sh2.Image(self.data, base)
          self.prog = discover.Program(self.img, [base] + list(seeds))
@@ -22,7 +33,7 @@ index 9b51f13..e175233 100644
          self.entries = sorted(self.prog.funcs)
          self.files, self.sites, self.unknown = [], {}, []
          self.n_ins = self.n_calls = 0
-@@ -229,7 +233,8 @@ endif()
+@@ -229,7 +240,8 @@ endif()
  """
  
  
@@ -32,7 +43,7 @@ index 9b51f13..e175233 100644
      """hooks: {program name: [address, ...]}, see --hook; overlays: program names, see --overlay."""
      hooks = hooks or {}
      overlays = set(overlays)
-@@ -245,7 +250,7 @@ def generate(specs, out, per_file=8000, comments=True, optest=False, log=print,
+@@ -245,7 +257,7 @@ def generate(specs, out, per_file=8000, comments=True, optest=False, log=print,
      modules = []
      for name, path, base, seeds in specs:
          t = time.time()
@@ -41,7 +52,7 @@ index 9b51f13..e175233 100644
          m.generate(out, per_file, comments, log)
          missing = m.hooks - {a for f in m.prog.funcs.values() for a in f.code}
          if missing:
-@@ -301,14 +306,20 @@ def main(argv=None):
+@@ -301,14 +313,20 @@ def main(argv=None):
      ap.add_argument("--optest", action="store_true", help="add saturnkit's instruction test module")
      ap.add_argument("--hook", action="append", default=[], help="NAME:ADDR,...: sh2_hook after these instructions")
      ap.add_argument("--overlay", action="append", default=[], help="NAME,...: programs called at their base, that return")
@@ -63,13 +74,240 @@ index 9b51f13..e175233 100644
  
  
  if __name__ == "__main__":
+diff --git a/runtime/host.cpp b/runtime/host.cpp
+index 71af681..9397015 100644
+--- a/runtime/host.cpp
++++ b/runtime/host.cpp
+@@ -89,7 +89,7 @@ bool host_open() {
+ 
+ // ---- sound ------------------------------------------------------------------------------------
+ static SDL_AudioStream* g_audio;
+-static const int kLead = 2205, kMax = 11025;    // frames: 50 ms ahead, 250 ms at most
++static const int kLead = 2205, kTarget = 3528, kMax = 22050;  // frames: 50 ms refill, 80 ms paced fill, 500 ms at most
+ static int g_underruns, g_dropped;
+ 
+ static void audio_silence(int frames) {
+@@ -223,6 +223,13 @@ void host_present(const Frame& f) {
+ 
+ void host_pace(uint64_t now) {
+     if (!g_win || !g_paced) return;
++    if (g_audio) {
++        // pace on the audio device clock: keep about kTarget frames queued, so the stream neither
++        // runs dry (gaps) nor overflows (dropped chunks) when the PC clock and the sound card drift
++        int over = SDL_GetAudioStreamQueued(g_audio) / 4 - kTarget;
++        if (over > 0) SDL_DelayPrecise((Uint64)over * 1000000000ull / 44100);
++        return;
++    }
+     Clock::time_point due = g_base + std::chrono::nanoseconds(now);
+     Clock::time_point t = Clock::now();
+     if (t > due + std::chrono::milliseconds(100)) g_base += t - due;   // behind: do not run to catch up
 diff --git a/runtime/machine.cpp b/runtime/machine.cpp
-index 8ca11a2..686aaa1 100644
+index 8ca11a2..89a3424 100644
 --- a/runtime/machine.cpp
 +++ b/runtime/machine.cpp
-@@ -319,10 +319,12 @@ void sh2_poll(SH2Context& c) {
+@@ -20,8 +20,10 @@
+ // reads at 0x06000250, vector 0x94, which SYS_SETSINT sets); it runs until it
+ // waits: it reads its FRT's input-capture flag and finds nothing there (the
+ // SBL slave loop), or it has used a slice of safe points. A write to SINIT
+-// sets that flag and hands it the CPU at once; while it has work, the master
+-// gives it a slice at each of its own polls.
++// sets that flag; the slave gets the CPU at the master's next poll, not at
++// once (the hardware's slave reacts a few cycles late: Scorcher's 0600ABC4
++// wakes it before storing the job's argument at 0600ABC8); while it has
++// work, the master gives it a slice at each of its own polls.
+ //
+ // Program starts. A call to a module's base address is a crt0: it resets the
+ // stack and never returns. The runtime identifies the image in memory,
+@@ -36,10 +38,14 @@
+ #include <cstdlib>
+ #include <cstring>
+ #include <algorithm>
++#include <atomic>
+ #include <map>
+ #include <mutex>
+ #include <thread>
+ #include <vector>
++#ifdef _WIN32
++#include <windows.h>
++#endif
+ 
+ SaturnConfig g_cfg;
+ SH2Context g_master, g_slave;
+@@ -108,6 +114,8 @@ static void backtrace(const SH2Context& c) {
+ // tables map it back to that function's guest entry.
+ static void* g_poll_ring[4096];
+ static unsigned g_poll_pos;
++static void* g_slave_ring[4096];    // the same for the slave
++static unsigned g_slave_pos;
+ 
+ // The recompiled function a host code address lies in: its module and guest entry
+ struct HostFn { uintptr_t host; uint32_t addr; const char* mod; };
+@@ -132,16 +140,17 @@ static void watch_report(uint32_t a, uint32_t v, int size, const void* host) {
+              f ? f->mod : "?", f ? f->addr : 0, g_cpu->pr, (unsigned long long)sat_vblanks());
+ }
+ 
+-static void hot_spots() {
++static void hot_spots(void* const* ring, const char* what) {
+     std::map<std::pair<const char*, uint32_t>, int> hist;
+-    for (void* p : g_poll_ring) {
++    for (int i = 0; i < 4096; ++i) {
++        void* p = ring[i];
+         if (!p) continue;
+         if (const HostFn* f = host_function(p)) ++hist[{f->mod, f->addr}];
+     }
+     std::vector<std::pair<int, std::pair<const char*, uint32_t>>> top;
+     for (auto& [k, n] : hist) top.push_back({n, k});
+     std::sort(top.rbegin(), top.rend());
+-    std::fprintf(stderr, "  last polls in:");
++    std::fprintf(stderr, "  %s:", what);
+     for (size_t i = 0; i < top.size() && i < 8; ++i)
+         std::fprintf(stderr, " %s:%08X x%d", top[i].second.first, top[i].second.second, top[i].first);
+     std::fprintf(stderr, "\n");
+@@ -172,6 +181,22 @@ static void report_ints() {
+     std::fprintf(stderr, "\n");
+ }
+ 
++// The host call stack at a fatal, each frame mapped to the recompiled function
++// it lies in (module:guest entry+host offset; a big offset = not recompiled code)
++static void host_stack() {
++#ifdef _WIN32
++    void* frames[48];
++    USHORT n = RtlCaptureStackBackTrace(1, 48, frames, nullptr);
++    std::fprintf(stderr, "  host stack:");
++    for (USHORT i = 0; i < n; ++i) {
++        const HostFn* f = host_function(frames[i]);
++        if (f) std::fprintf(stderr, " %s:%08X+%llX", f->mod, f->addr, (unsigned long long)((uintptr_t)frames[i] - f->host));
++        else std::fprintf(stderr, " ?");
++    }
++    std::fprintf(stderr, "\n");
++#endif
++}
++
+ void sat_fatal(const char* fmt, ...) {
+     va_list ap;
+     va_start(ap, fmt);
+@@ -181,8 +206,10 @@ void sat_fatal(const char* fmt, ...) {
+     std::fprintf(stderr, "  cpu %d  pr %08X  pc %08X  sr %03X\n", c.cpu, c.pr, c.pc, sh2_get_sr(c));
+     for (int i = 0; i < 16; ++i) std::fprintf(stderr, "  r%-2d %08X%s", i, c.r[i], i % 4 == 3 ? "\n" : "");
+     backtrace(c);
++    host_stack();
+     report_ints();
+-    hot_spots();
++    hot_spots(g_poll_ring, "last polls in");
++    hot_spots(g_slave_ring, "last slave polls in");
+     mmio_log_write(g_cfg.out + "/hw-log.txt");
+     std::fflush(stderr);
+     std::_Exit(1);
+@@ -198,15 +225,29 @@ void sat_stop(const char* why) {
+ // ---- the slave: a coroutine on its own thread -----------------------------------------------
+ static std::mutex g_mu;
+ static std::condition_variable g_cv;
+-static int g_turn;                  // 0 the master runs, 1 the slave
++static std::atomic<int> g_turn;     // 0 the master runs, 1 the slave
++static std::atomic<int> g_sleepers; // threads waiting on g_cv, not spinning
+ static bool g_slave_on, g_slave_idle = true, g_slave_reset, g_slave_thread;
+ static int g_slave_polls;
+ 
+-static void give(int to) {          // hand the CPU over and wait until it comes back
++// A turn comes back within a slice (~100 us) while the slave has work: spin
++// that long, then sleep on the condition variable (a kernel wait per turn
++// costs more than the slice's work on Windows).
++static void wait_turn(int t) {
++    for (int i = 0; i < 4000; ++i) {
++        if (g_turn.load(std::memory_order_acquire) == t) return;
++        __builtin_ia32_pause();
++    }
+     std::unique_lock<std::mutex> lk(g_mu);
+-    g_turn = to;
+-    g_cv.notify_all();
+-    g_cv.wait(lk, [&] { return g_turn == 1 - to; });
++    ++g_sleepers;
++    g_cv.wait(lk, [&] { return g_turn.load() == t; });
++    --g_sleepers;
++}
++
++static void give(int to) {          // hand the CPU over and wait until it comes back
++    g_turn.store(to);
++    if (g_sleepers.load()) { std::lock_guard<std::mutex> lk(g_mu); g_cv.notify_all(); }
++    wait_turn(1 - to);
+ }
+ 
+ static void to_slave() {
+@@ -222,10 +263,7 @@ static void to_master() {
+ }
+ 
+ static void slave_main() {
+-    {
+-        std::unique_lock<std::mutex> lk(g_mu);
+-        g_cv.wait(lk, [] { return g_turn == 1; });
+-    }
++    wait_turn(1);
+     g_cpu = &g_slave;
+     for (;;) {
+         try {
+@@ -277,22 +315,50 @@ void slave_idle_check(uint32_t ftcsr) {
+     to_master();
+ }
+ 
++// A slave that polls memory for work (not FTCSR) burns its whole slice; a game
++// layer hooks its empty-queue branch and gives the CPU back until the next poll.
++void slave_yield() {
++    if (g_cpu->cpu == 1) to_master();
++}
++
+ // SINIT: the master pulses the slave's FRT input capture
+ void slave_kick() {
+     onchip_input_capture(1);
+     if (!g_slave_on) return;
+-    g_slave_idle = false;
+-    to_slave();
++    g_slave_idle = false;           // it runs from the master's next poll
++}
++
++// --poke ADDR=VALUE@FROM[-TO],...: longs held in memory over a span of VBlanks
++struct Poke { uint32_t a, v; uint64_t from, to; };
++static std::vector<Poke> g_pokes;
++static void parse_pokes(const std::string& spec) {
++    size_t i = 0;
++    while (i < spec.size()) {
++        size_t j = spec.find(',', i);
++        std::string item = spec.substr(i, j == std::string::npos ? std::string::npos : j - i);
++        i = j == std::string::npos ? spec.size() : j + 1;
++        unsigned a, v; unsigned long long from = 0, to = ~0ull;
++        if (std::sscanf(item.c_str(), "%x=%x@%llu-%llu", &a, &v, &from, &to) < 2)
++            sat_fatal("--poke ADDR=VALUE@FROM[-TO], not %s", item.c_str());
++        g_pokes.push_back({a, v, from, to});
++    }
+ }
+ 
+ // ---- time, devices, interrupts ----------------------------------------------------------
++#ifdef SATURNKIT_PROF
++double g_prof[10];
++static const char* const kProfNames[10] = {"video_tick", "cd_tick", "smpc_tick", "sound_tick", "slave", "vdp1 draw", "vdp2_compose", "host_present", "host_pace", "run"};
++#endif
++
+ void master_poll_devices() {
+     uint64_t now = sat_now();
+-    video_tick(now);
+-    cd_tick();
+-    smpc_tick();
+-    sound_tick();
+-    if (g_slave_on && !g_slave_idle) to_slave();
++    { SAT_PROF(0); video_tick(now); }
++    { SAT_PROF(1); cd_tick(); }
++    { SAT_PROF(2); smpc_tick(); }
++    { SAT_PROF(3); sound_tick(); }
++    for (const Poke& p : g_pokes)
++        if (sat_vblanks() >= p.from && sat_vblanks() <= p.to) st32(p.a, p.v);
++    if (g_slave_on && !g_slave_idle) { SAT_PROF(4); to_slave(); }
+     if (g_cfg.stop_vblanks && sat_vblanks() >= g_cfg.stop_vblanks) sat_stop("VBlank limit");
+ }
+ 
+@@ -318,11 +384,14 @@ static bool advance(SH2Context& c, uint64_t until) {
+ void sh2_poll(SH2Context& c) {
      c.budget = kBudget;
      if (c.cpu == 1) {
++        g_slave_ring[g_slave_pos++ % 4096] = __builtin_return_address(0);
          if (++g_slave_polls >= kSlaveSlice) to_master();
 +        onchip_frt_interrupt(c);
          return;
@@ -80,7 +318,7 @@ index 8ca11a2..686aaa1 100644
  }
  
  static int g_irq_active = -1;
-@@ -343,7 +345,16 @@ void sat_interrupt(SH2Context& c, uint32_t vec, uint32_t level) {
+@@ -343,7 +412,16 @@ void sat_interrupt(SH2Context& c, uint32_t vec, uint32_t level) {
      } else {
          c.pc = 0;
          sh2_call(c, target);
@@ -98,6 +336,192 @@ index 8ca11a2..686aaa1 100644
      }
      int32_t budget = c.budget;
      c = saved;
+@@ -397,8 +475,25 @@ void sh2_overlay_call(SH2Context& c, uint32_t addr, const SH2Module* m) {
+     sat_note("overlay %d: %s at %08X (from pr %08X)", g_overlays, m->name, addr, c.pr);
+ }
+ 
++// ---- the game layer -------------------------------------------------------------------------
++static std::vector<SatGameInit>& game_inits() { static std::vector<SatGameInit> v; return v; }
++void sat_add_game_init(SatGameInit fn) { game_inits().push_back(fn); }
++
++std::string sat_game_option(const char* key, const char* fallback) {
++    size_t n = std::strlen(key);
++    for (const std::string& o : g_cfg.game)
++        if (o.compare(0, n, key) == 0 && (o.size() == n || o[n] == '='))
++            return o.size() == n ? std::string() : o.substr(n + 1);
++    return fallback ? fallback : std::string();
++}
++
+ int saturn_main(const SaturnConfig& cfg) {
++#ifdef SATURNKIT_PROF
++    auto prof_t0 = std::chrono::steady_clock::now();
++#endif
+     g_cfg = cfg;
++    parse_pokes(cfg.poke);
++    for (SatGameInit fn : game_inits()) fn(g_cfg);
+     g_t0 = std::chrono::steady_clock::now();
+     mmio_watch(cfg.watch_lo, cfg.watch_hi);
+     if (cfg.watch_lo <= cfg.watch_hi && (SH2_IS_WRAM_H(cfg.watch_lo) || SH2_IS_WRAM_L(cfg.watch_lo))) {
+@@ -454,12 +549,18 @@ int saturn_main(const SaturnConfig& cfg) {
+     report_ints();
+     std::fprintf(stderr, "  master pr %08X, sr %03X\n", g_master.pr, sh2_get_sr(g_master));
+     backtrace(g_master);
+-    hot_spots();
++    hot_spots(g_poll_ring, "last polls in");
++    hot_spots(g_slave_ring, "last slave polls in");
+     peek(cfg.peek);
+     sound_close();
+     mmio_log_write(cfg.out + "/hw-log.txt");
+     bios_save();
+     std::fflush(stderr);
+     std::fflush(stdout);
+-    std::_Exit(0);                  // the slave's thread is parked: do not wait for it
++#ifdef SATURNKIT_PROF
++    g_prof[9] = std::chrono::duration<double>(std::chrono::steady_clock::now() - prof_t0).count();
++    for (int i = 0; i < 10; ++i) std::fprintf(stderr, "  prof %-13s %8.3f s\n", kProfNames[i], g_prof[i]);
++    std::fflush(stderr);
++#endif
++    std::_Exit(0);                 // the slave's thread is parked: do not wait for it
+ }
+diff --git a/runtime/main.cpp b/runtime/main.cpp
+index a34ffee..1e2ecbf 100644
+--- a/runtime/main.cpp
++++ b/runtime/main.cpp
+@@ -3,8 +3,9 @@
+ //
+ //     saturn --cue GAME.cue [--out DIR] [--headless] [--fullscreen] [--scale N]
+ //            [--vblanks N] [--starts N] [--trace] [--realtime] [--input VBLANK:BUTTONS,...|@FILE]
+-//            [--record-input FILE] [--shot N,...] [--dump N,...] [--peek ADDR[:WORDS],...] [--watch LO:HI]
++//            [--record-input FILE] [--shot N,...] [--dump N,...] [--peek ADDR[:WORDS],...] [--poke ADDR=V@FROM[-TO],...] [--watch LO:HI]
+ //            [--watch-vblanks FROM:TO] [--wav FILE] [--interp] [--hook ADDR:rN=VALUE ...]
++//            [--game KEY[=VALUE] ...]
+ //
+ // --vblanks and --starts end the run after that many VBlanks or program
+ // starts; the log of the hardware touched goes to DIR/hw-log.txt. --shot
+@@ -14,16 +15,76 @@
+ // recomp --hook). --watch LO:HI logs each access to a memory area in the
+ // range with --trace; in the work RAMs, each store, with the function that
+ // made it, with or without --trace; --watch-vblanks FROM:TO narrows that to
+-// those VBlanks. --record-input writes the pad as the host presses it (the
++// those VBlanks. --poke stores the long V at ADDR at every poll from VBlank
++// FROM (to TO, else to the end): a game flag held, say. --record-input writes the pad as the host presses it (the
+ // keyboard, a gamepad), sampled once a VBlank, as an --input script: given
+ // back with --input @FILE, the run goes the same way again. --interp draws the fields between the game's frames with
+-// everything moved part of the way (vdp1.cpp), one frame behind.
++// everything moved part of the way (vdp1.cpp), one frame behind. --game
++// passes an option to the game layer compiled into this executable, if any.
++//
++// Started with no arguments (a shortcut, a pinned copy), the program reads
++// them from saturn-args.txt next to the executable, whitespace separated,
++// "quoted" for spaces, paths relative to that folder.
+ #include "saturn.h"
+ #include <cstdio>
+ #include <cstdlib>
++#include <cctype>
+ #include <cstring>
++#include <string>
++#include <vector>
++#ifdef _WIN32
++#include <windows.h>
++#include <direct.h>
++#else
++#include <unistd.h>
++#endif
++
++namespace {
++
++std::vector<std::string> g_file_args;
++std::vector<char*> g_file_argv;
++
++// the arguments from saturn-args.txt beside argv0; false when there is none
++bool args_from_file(const char* argv0, int& argc, char**& argv) {
++    std::string exe = argv0;
++#ifdef _WIN32
++    char buf[MAX_PATH];
++    if (GetModuleFileNameA(nullptr, buf, sizeof buf)) exe = buf;
++#endif
++    size_t slash = exe.find_last_of("/\\");
++    std::string dir = slash == std::string::npos ? "." : exe.substr(0, slash);
++    FILE* f = std::fopen((dir + "/saturn-args.txt").c_str(), "rb");
++    if (!f) return false;
++    std::string text;
++    for (int ch; (ch = std::fgetc(f)) != EOF;) text += (char)ch;
++    std::fclose(f);
++    g_file_args.push_back(exe);
++    for (size_t i = 0; i < text.size();) {
++        while (i < text.size() && std::isspace((unsigned char)text[i])) ++i;
++        if (i >= text.size()) break;
++        std::string arg;
++        bool quoted = false;
++        for (; i < text.size() && (quoted || !std::isspace((unsigned char)text[i])); ++i)
++            if (text[i] == '"') quoted = !quoted;
++            else arg += text[i];
++        g_file_args.push_back(arg);
++    }
++    for (auto& a : g_file_args) g_file_argv.push_back(&a[0]);
++    g_file_argv.push_back(nullptr);
++    argc = (int)g_file_args.size();
++    argv = g_file_argv.data();
++#ifdef _WIN32
++    _chdir(dir.c_str());
++#else
++    chdir(dir.c_str());
++#endif
++    return true;
++}
++
++}  // namespace
+ 
+ int main(int argc, char** argv) {
++    if (argc == 1) args_from_file(argv[0], argc, argv);
+     SaturnConfig cfg;
+     for (int i = 1; i < argc; ++i) {
+         const char* a = argv[i];
+@@ -34,6 +95,7 @@ int main(int argc, char** argv) {
+         else if (!std::strcmp(a, "--starts") && more) cfg.stop_starts = std::atoi(argv[++i]);
+         else if (!std::strcmp(a, "--trace")) cfg.trace = true;
+         else if (!std::strcmp(a, "--peek") && more) cfg.peek = argv[++i];
++        else if (!std::strcmp(a, "--poke") && more) cfg.poke = argv[++i];
+         else if (!std::strcmp(a, "--watch") && more) {
+             const char* w = argv[++i];
+             cfg.watch_lo = (uint32_t)std::strtoul(w, nullptr, 16);
+@@ -56,6 +118,7 @@ int main(int argc, char** argv) {
+         else if (!std::strcmp(a, "--scale") && more) cfg.scale = std::atoi(argv[++i]);
+         else if (!std::strcmp(a, "--wav") && more) cfg.wav = argv[++i];
+         else if (!std::strcmp(a, "--interp")) cfg.interp = true;
++        else if (!std::strcmp(a, "--game") && more) cfg.game.push_back(argv[++i]);
+         else if (!std::strcmp(a, "--hook") && more) {
+             unsigned addr, reg, v;
+             if (std::sscanf(argv[++i], "%x:r%u=%x", &addr, &reg, &v) != 3 || reg > 15) {
+diff --git a/runtime/mmio.cpp b/runtime/mmio.cpp
+index c49aedd..6bf9a42 100644
+--- a/runtime/mmio.cpp
++++ b/runtime/mmio.cpp
+@@ -86,6 +86,7 @@ static uint8_t g_cache[2][0x1000];      // each CPU's cache as RAM (0xC0000000)
+ static const char* area_of(uint32_t a) {
+     if (a < 0x00080000u) return "BIOS ROM";
+     if (a >= 0x00180000u && a < 0x00200000u) return "backup RAM";
++    if (a >= 0x00300000u && a < 0x00400000u) return "nothing past low work RAM";   // a scaled sprite's source may run past its end (Scorcher's slave scalers)
+     if (a >= 0x02000000u && a < 0x05000000u) return "A-bus cartridge";
+     if (a >= 0x05A00000u && a < 0x05B00000u) return "SCSP RAM";
+     if (a >= 0x05C00000u && a < 0x05C80000u) return "VDP1 VRAM";
+@@ -115,6 +116,16 @@ uint32_t sh2_mmio_read(uint32_t a, int size) {
+     if (a >= 0x05800000u && a < 0x05900000u) return cd_read(a & 0xFFFFF, size);
+     if (a >= 0x05FE0000u && a < 0x05FE0100u) return scu_read(a & 0xFF, size);
+     if (video_owns(a)) return video_read(a, size);
++    // Nothing decodes 0x00400000-0x00FFFFFF; the hardware reads bus garbage
++    // there and goes on. Scorcher's scaled blit spr_ScaleBlit15LitRot90 (060078EC,
++    // a slave job) samples a source row above the sprite on stage 4 (v = -2,
++    // from its flip start, through mulu.w: 0xFFFE * width) and lands here; the
++    // palette slot it reads through then decides the pixel.
++    if (a >= 0x00400000u && a < 0x01000000u) {
++        static bool noted;
++        if (!noted) { noted = true; sat_note("%d-byte read of %08X: nothing there, read as 0 (noted once)", size, a); }
++        return 0;
++    }
+     sat_fatal("%d-byte read of %08X: nothing there", size, a);
+ }
+ 
 diff --git a/runtime/onchip.cpp b/runtime/onchip.cpp
 index 960aad1..58014c9 100644
 --- a/runtime/onchip.cpp
@@ -131,10 +555,78 @@ index 960aad1..58014c9 100644
          v = rd(o, off, size);
      }
 diff --git a/runtime/saturn.h b/runtime/saturn.h
-index d9a84e3..9130115 100644
+index d9a84e3..13398c4 100644
 --- a/runtime/saturn.h
 +++ b/runtime/saturn.h
-@@ -124,6 +124,7 @@ uint32_t onchip_read(SH2Context& c, uint32_t a, int size);
+@@ -21,6 +21,21 @@
+ #include "sh2.h"
+ #include <cstdint>
+ #include <string>
++#include <vector>
++
++// a -DSATURNKIT_PROF build times the parts of a run (wall clock, inclusive) and prints them at the end
++#ifdef SATURNKIT_PROF
++#include <chrono>
++extern double g_prof[10];
++struct ProfScope {
++    int i; std::chrono::steady_clock::time_point t = std::chrono::steady_clock::now();
++    explicit ProfScope(int k) : i(k) {}
++    ~ProfScope() { g_prof[i] += std::chrono::duration<double>(std::chrono::steady_clock::now() - t).count(); }
++};
++#define SAT_PROF(i) ProfScope sat_prof_scope(i)
++#else
++#define SAT_PROF(i)
++#endif
+ 
+ // ---- the machine (machine.cpp) -------------------------------------------------------
+ struct SaturnConfig {
+@@ -31,6 +46,7 @@ struct SaturnConfig {
+     int stop_starts = 0;            // ... or after this many program starts (0: never)
+     bool trace = false;             // events to stderr
+     std::string peek;               // ADDR[:WORDS],... : memory printed when the run ends
++    std::string poke;               // ADDR=VALUE@FROM[-TO],... : a long stored at each poll in those VBlanks
+     uint32_t watch_lo = 1, watch_hi = 0;   // memory-area addresses logged one by one (with --trace);
+                                            // in the work RAMs, every store, always
+     uint64_t watch_from = 0, watch_to = ~0ull;   // ... between these VBlanks
+@@ -43,6 +59,7 @@ struct SaturnConfig {
+     int scale = 3;                  // the window: 320x240 times this
+     std::string wav;                // the run's sound to this file (16-bit stereo, 44 100 Hz)
+     bool interp = false;            // fields between the game's frames drawn moving (vdp1.cpp)
++    std::vector<std::string> game;  // --game KEY[=VALUE]: options for the game layer
+ };
+ extern SaturnConfig g_cfg;
+ extern SH2Context g_master, g_slave;
+@@ -60,9 +77,17 @@ int  sat_interrupt_active();        // the vector whose handler the master runs
+ void slave_on();                    // SMPC SSHON: the slave boots
+ void slave_off();                   // SSHOFF: held in reset
+ void slave_idle_check(uint32_t ftcsr);   // the slave read its FTCSR: yield if nothing is there
++void slave_yield();                 // the slave waits on memory (a game layer hook): the CPU back to the master
+ void slave_kick();                  // SINIT: the slave's input capture, and the CPU to it
+ void master_poll_devices();
+ 
++// ---- a game layer (compiled into the executable beside main.cpp) ----------------------------
++// It registers from a static initializer; saturn_main calls each init once the
++// configuration is read (before the boot), with the --game options.
++typedef void (*SatGameInit)(const SaturnConfig& cfg);
++void sat_add_game_init(SatGameInit fn);
++std::string sat_game_option(const char* key, const char* fallback);   // --game KEY=VALUE ("" for a bare KEY)
++
+ // ---- the BIOS (bios.cpp) -----------------------------------------------------------
+ void bios_boot();                   // the state the BIOS leaves, the 1st read file loaded
+ uint32_t bios_first_read();         // where it was loaded (the entry)
+@@ -103,6 +128,11 @@ void smpc_write(uint32_t off, uint32_t v);
+ void smpc_tick();
+ void smpc_input_script(const std::string& spec);   // "VBLANK:BUTTON+BUTTON,..."
+ void smpc_set_area(char symbol);                   // the disc's first area symbol (J T U B K A E L)
++// a game layer's pad: the buttons pressed (active high, bits as --input's: RIGHT 0x8000 LEFT 0x4000
++// DOWN 0x2000 UP 0x1000 START 0x0800 A 0x0400 C 0x0200 B 0x0100 R 0x80 X 0x40 Y 0x20 Z 0x10 L 0x08)
++// from the script's and the host's; it returns the buttons the program reads
++typedef uint16_t (*SmpcPadFilter)(uint16_t pressed);
++void smpc_pad_filter(SmpcPadFilter fn);
+ 
+ // ---- CD block (cdblock.cpp, cdrom.cpp) ------------------------------------------------
+ bool cdrom_open(const std::string& cue);
+@@ -124,6 +154,7 @@ uint32_t onchip_read(SH2Context& c, uint32_t a, int size);
  void onchip_write(SH2Context& c, uint32_t a, uint32_t v, int size);
  void onchip_input_capture(int cpu);   // SINIT/MINIT: the FRT's input-capture flag
  void onchip_reset(int cpu);
@@ -142,10 +634,98 @@ index d9a84e3..9130115 100644
  
  // ---- video (video.cpp; vdp1.cpp, vdp2.cpp, host.cpp through video.h) --------------------------
  void video_init();
+diff --git a/runtime/scsp.cpp b/runtime/scsp.cpp
+index 73bcfdf..2b98a0a 100644
+--- a/runtime/scsp.cpp
++++ b/runtime/scsp.cpp
+@@ -495,7 +495,8 @@ uint16_t read16(uint32_t off) {
+     }
+     if (off >= 0x600 && off < 0x680) return (uint16_t)g_stack[(off - 0x600) >> 1];
+     if (off >= 0x700 && off < 0x780) return (uint16_t)g_dsp.coef[(off - 0x700) >> 1];
+-    if (off >= 0x780 && off < 0x800) return g_dsp.madrs[(off - 0x780) >> 1 & 31];
++    if (off >= 0x780 && off < 0x7C0) return g_dsp.madrs[(off - 0x780) >> 1];
++    if (off >= 0x7C0 && off < 0x800) return 0;   // unused: drivers clear 0x780-0x7FF as 64 words
+     if (off >= 0x800 && off < 0xC00) return g_dsp.mpro[(off - 0x800) >> 1];
+     auto half = [&](int32_t v) { return (uint16_t)(off & 2 ? v & 0xFFFF : (uint32_t)v >> 16); };
+     if (off >= 0xC00 && off < 0xE00) return half(g_dsp.temp[(off >> 2) & 0x7F]);
+@@ -525,7 +526,7 @@ void write16(uint32_t off, uint16_t v, uint16_t mask) {
+                               t.dipan(), t.imxl(), t.isel(), t.efsdl(), t.efpan(), t.ar_r(), t.d1r_r(), t.d2r_r(), t.rr_r(),
+                               t.dl_r(), t.mdl());
+                 }
+-                else if (!kb && t.keyed) key_off(t);
++                else if (!kb && t.keyed) { key_off(t); sat_trace("SCSP key off %2d", (int)(&t - g_slot)); }
+                 t.keyed = kb;
+             }
+         }
+@@ -565,7 +566,8 @@ void write16(uint32_t off, uint16_t v, uint16_t mask) {
+     auto merge = [&](uint16_t old) { return (uint16_t)((old & ~mask) | (v & mask)); };
+     if (off >= 0x600 && off < 0x680) { int32_t& x = g_stack[(off - 0x600) >> 1]; x = (int16_t)merge((uint16_t)x); return; }
+     if (off >= 0x700 && off < 0x780) { int16_t& x = g_dsp.coef[(off - 0x700) >> 1]; x = (int16_t)merge((uint16_t)x); return; }
+-    if (off >= 0x780 && off < 0x800) { uint16_t& x = g_dsp.madrs[(off - 0x780) >> 1 & 31]; x = merge(x); return; }
++    if (off >= 0x780 && off < 0x7C0) { uint16_t& x = g_dsp.madrs[(off - 0x780) >> 1]; x = merge(x); return; }
++    if (off >= 0x7C0 && off < 0x800) return;   // unused (it must not wrap onto MADRS)
+     if (off >= 0x800 && off < 0xC00) {
+         uint16_t& x = g_dsp.mpro[(off - 0x800) >> 1];
+         x = merge(x);
+diff --git a/runtime/smpc.cpp b/runtime/smpc.cpp
+index 50118ca..4a070aa 100644
+--- a/runtime/smpc.cpp
++++ b/runtime/smpc.cpp
+@@ -126,6 +126,9 @@ static void record_host(uint64_t vblank, uint16_t pressed) {
+     std::fflush(g_record);
+ }
+ 
++static SmpcPadFilter g_pad_filter;
++void smpc_pad_filter(SmpcPadFilter fn) { g_pad_filter = fn; }
++
+ // port 1's pad now, active low: byte 1 RIGHT LEFT DOWN UP START A C B, byte 2 R X Y Z L 1 1 1
+ static uint16_t pad1_now() {
+     while (g_script_pos < g_script.size() && g_script[g_script_pos].first <= sat_vblanks()) {
+@@ -139,7 +142,9 @@ static uint16_t pad1_now() {
+         if (h != g_host_pressed) record_host(g_host_vblank, h);
+         g_host_pressed = h;
+     }
+-    return (uint16_t)~(g_script_pressed | g_host_pressed) | 0x0007;
++    uint16_t pressed = g_script_pressed | g_host_pressed;
++    if (g_pad_filter) pressed = g_pad_filter(pressed);
++    return (uint16_t)~pressed | 0x0007;
+ }
+ 
+ // PDR1 read in direct mode: the lines the SH-2 drives (DDR1) read back as written,
+diff --git a/runtime/sound.cpp b/runtime/sound.cpp
+index f823ad1..43642a8 100644
+--- a/runtime/sound.cpp
++++ b/runtime/sound.cpp
+@@ -156,6 +156,8 @@ uint32_t sound_read(uint32_t a, int size) {
+ }
+ 
+ void sound_write(uint32_t a, uint32_t v, int size) {
+-    if (a < 0x05B00000u) { mem_wr(g_sound_ram, a & 0x7FFFF, v, size); return; }
++    if (a < 0x05B00000u) {
++        mem_wr(g_sound_ram, a & 0x7FFFF, v, size); return;
++    }
+     scsp_write(a & 0xFFF, v, size);
+ }
 diff --git a/runtime/vdp1.cpp b/runtime/vdp1.cpp
-index b5aec0e..5ba293d 100644
+index b5aec0e..5190eba 100644
 --- a/runtime/vdp1.cpp
 +++ b/runtime/vdp1.cpp
+@@ -38,7 +38,6 @@
+ #include <array>
+ #include <climits>
+ #include <cmath>
+-#include <cstdlib>
+ #include <unordered_map>
+ 
+ uint8_t g_vdp1_vram[0x80000];
+@@ -376,6 +375,7 @@ void vdp1_next_draw_keys(std::vector<uint64_t> keys) { g_next_keys = std::move(k
+ const uint16_t* vdp1_display() { return g_show_ifb ? g_ifb : g_fb[g_draw_fb ^ 1]; }
+ 
+ static void draw() {
++    SAT_PROF(5);
+     g_reg[EDSR] = (uint16_t)(g_reg[EDSR] >> 1 & 1);   // BEF <- CEF, CEF <- 0
+     if (g_reg[TVMR] & 3) sat_fatal("VDP1: TVMR %04X (8 bpp or rotation) is not done", g_reg[TVMR]);
+     g_target = g_fb[g_draw_fb];
 @@ -704,6 +704,11 @@ static void reg_write(uint32_t off, uint16_t v) {
      sat_trace("VDP1 reg %02X <- %04X (pr %08X)", off, v, g_cpu->pr);
      if (r >= EDSR) return;                       // read-only
@@ -158,8 +738,168 @@ index b5aec0e..5ba293d 100644
      switch (r) {
      case FBCR:
          if ((v & 3) == 3) g_change_pending = true;
+diff --git a/runtime/vdp2.cpp b/runtime/vdp2.cpp
+index a6a9f76..bc5bec0 100644
+--- a/runtime/vdp2.cpp
++++ b/runtime/vdp2.cpp
+@@ -17,7 +17,7 @@
+ // add); the colour offsets A and B; the back screen (one colour or one a
+ // line); windows 0 and 1 (rectangles or line tables, inside or outside, OR
+ // or AND) on NBG0-NBG3 and the sprite layer; the display bit. What is not:
+-// RBG1, rotation parameters chosen by window, the coefficients' line colour,
++// rotation parameters chosen by window, the coefficients' line colour,
+ // vertical-cell scroll, mosaic, the
+ // sprite window and the colour-calculation and rotation-parameter windows,
+ // the line colour screen, shadows on VDP2's layers,
+@@ -309,6 +309,7 @@ struct RotParam {
+ struct Rbg {
+     bool on;
+     int mode;                                   // RPMD
++    int fixed;                                  // -1: RPMD picks; 0/1: parameter A/B only (RBG1 shown)
+     bool crkte, perdot, bank_coef[4];
+     RotParam par[2];
+     uint8_t prio, ratio;
+@@ -318,12 +319,16 @@ struct Rbg {
+ static int32_t sext(uint32_t v, int bits) { return (int32_t)(v << (32 - bits)) >> (32 - bits); }
+ static uint32_t vl(uint32_t a) { return (uint32_t)vw(a) << 16 | vw(a + 2); }
+ 
+-static void setup_rbg(Rbg& r) {
++// which 0: RBG0; 1: RBG1, which takes NBG0's place and registers (characters, pattern names,
++// priority, colour calculation, offset) and shows parameter B, while RBG0 keeps parameter A
++static void setup_rbg(Rbg& r, int which) {
+     r = Rbg{};
+     uint16_t bgon = reg(0x20);
+-    r.on = bgon >> 4 & 1;
++    bool r1 = bgon >> 5 & 1;
++    r.on = bgon >> (4 + which) & 1;
+     if (!r.on) return;
+     r.mode = reg(0xB0) & 3;
++    r.fixed = which ? 1 : r1 ? 0 : -1;
+     uint16_t ramctl = reg(0x0E);
+     r.crkte = ramctl >> 15 & 1;
+     for (int b = 0; b < 4; ++b) {                // which VRAM banks hold coefficients (RDBS), split or not
+@@ -331,30 +336,32 @@ static void setup_rbg(Rbg& r) {
+         r.bank_coef[b] = r.crkte || (ramctl >> (esb * 2) & 3) == 1;
+         r.perdot |= r.bank_coef[b];
+     }
+-    r.prio = (uint8_t)(reg(0xFC) & 7);
+-    r.ratio = (uint8_t)(reg(0x10C) & 0x1F);
+-    r.cc = reg(0xEC) >> 4 & 1;
+-    r.offset = reg(0x110) >> 4 & 1;
+-    r.offset_b = reg(0x112) >> 4 & 1;
+-    uint16_t chctl = (uint16_t)(reg(0x2A) >> 8), pncr = reg(0x38);
++    int lb = which ? 0 : 4;                     // the layer's bit in CCCTL, CLOFEN, CLOFSL
++    r.prio = (uint8_t)((which ? reg(0xF8) : reg(0xFC)) & 7);
++    r.ratio = (uint8_t)((which ? reg(0x108) : reg(0x10C)) & 0x1F);
++    r.cc = reg(0xEC) >> lb & 1;
++    r.offset = reg(0x110) >> lb & 1;
++    r.offset_b = reg(0x112) >> lb & 1;
++    uint16_t chctl = (uint16_t)(which ? reg(0x28) : reg(0x2A) >> 8), pncr = which ? reg(0x30) : reg(0x38);
++    uint16_t bmpn = (uint16_t)(which ? reg(0x2C) : reg(0x2E));
+     uint32_t rpta = ((uint32_t)(reg(0xBC) & 7) << 16 | (reg(0xBE) & 0xFFFE)) * 2 & 0xFFF7C;
+     for (int i = 0; i < 2; ++i) {
+         RotParam& p = r.par[i];
+         Nbg& s = p.chr;
+         s.on = true;
+-        s.opaque = bgon >> 12 & 1;
++        s.opaque = bgon >> (which ? 8 : 12) & 1;
+         s.colors = chctl >> 4 & 7;
+-        s.bitmap = i == 0 && (chctl >> 1 & 1);
++        s.bitmap = (i == 0 || which) && (chctl >> 1 & 1);
+         s.cell2x2 = chctl & 1;
+         s.bm_w = 512;
+         s.bm_h = chctl >> 2 & 1 ? 512 : 256;
+-        s.bm_pal = (uint16_t)((reg(0x2E) & 7) << 4);
+-        s.bm_spr = reg(0x2E) >> 5 & 1;
+-        s.bm_scc = reg(0x2E) >> 4 & 1;
++        s.bm_pal = (uint16_t)((bmpn & 7) << 4);
++        s.bm_spr = bmpn >> 5 & 1;
++        s.bm_scc = bmpn >> 4 & 1;
+         s.word1 = pncr >> 15 & 1;
+         s.cnsm = pncr >> 14 & 1;
+         s.supp = pncr & 0x3FF;
+-        s.caos = (uint32_t)(reg(0xE6) & 7) << 8;
++        s.caos = (uint32_t)((which ? reg(0xE4) : reg(0xE6)) & 7) << 8;
+         int plsz = reg(0x3A) >> (8 + i * 4) & 3;
+         s.plane_w = plsz == 0 ? 1 : 2;
+         s.plane_h = plsz == 3 ? 2 : 1;
+@@ -428,7 +435,7 @@ static void rbg_line(Rbg& r, int y) {
+ }
+ 
+ static bool rbg_pixel(const Rbg& r, int x, Pix& out) {
+-    int sel = r.mode == 1 ? 1 : 0;              // RPMD 3 (by the rotation-parameter window) is taken as A
++    int sel = r.fixed >= 0 ? r.fixed : r.mode == 1 ? 1 : 0;   // RPMD 3 (by the rotation-parameter window) is taken as A
+     auto coef_at = [&](int i) {
+         const RotParam& p = r.par[i];
+         if (!r.perdot) return p.line_coef;
+@@ -436,7 +443,7 @@ static bool rbg_pixel(const Rbg& r, int x, Pix& out) {
+         return r.bank_coef[r.crkte ? 0 : (a >> 16) & 3] ? coef_read(r, p, a) : 0u;
+     };
+     uint32_t c = 0;
+-    if (r.mode == 2) {
++    if (r.fixed < 0 && r.mode == 2) {
+         c = r.par[0].coef ? coef_at(0) : 0;
+         if (c >> 31) { sel = 1; c = r.par[1].line_coef; }
+     } else if (r.par[sel].coef) {
+@@ -583,8 +590,8 @@ static void note_unsupported() {
+     auto once = [](int i, bool cond, const char* what, uint16_t v) {
+         if (cond && !noted[i]) { noted[i] = true; sat_note("VDP2: %s (%04X) is not done", what, v); }
+     };
+-    once(0, (reg(0x20) & 0x20) || ((reg(0x20) & 0x10) && (reg(0xB0) & 3) == 3),
+-         "RBG1, or rotation parameters chosen by window (BGON, RPMD)", reg(0x20));
++    once(0, (reg(0x20) & 0x30) == 0x10 && (reg(0xB0) & 3) == 3,
++         "rotation parameters chosen by window (BGON, RPMD)", reg(0x20));
+     once(1, reg(0x9A) & 0x0101, "vertical cell scroll (SCRCTL)", reg(0x9A));
+     once(2, reg(0x22) & 0xF, "mosaic (MZCTL)", reg(0x22));
+     once(3, ((reg(0xD0) | reg(0xD2) | reg(0xD4)) & 0x2020) || (reg(0xD6) & 0x2A2A),
+@@ -644,7 +651,7 @@ void vdp2_compose(Frame& f) {
+     // a debugging aid: SATURNKIT_VDP2_HIDE=MASK leaves out layers (1 sprite, 2 RBG0, 4-32 NBG0-NBG3)
+     static const unsigned hide = [] { const char* e = std::getenv("SATURNKIT_VDP2_HIDE"); return e ? (unsigned)std::strtoul(e, nullptr, 0) : 0u; }();
+     static Nbg nbg[4];
+-    static Rbg rbg;
++    static Rbg rbg, rbg1;
+     uint8_t wctl[L_COUNT];
+     uint32_t bk = 0;
+     bool bk_lines = false, add = false;
+@@ -652,7 +659,8 @@ void vdp2_compose(Frame& f) {
+     Pix back{};
+     auto setup = [&] {
+         for (int n = 0; n < 4; ++n) setup_nbg(n, nbg[n]);
+-        setup_rbg(rbg);
++        setup_rbg(rbg, 0);
++        setup_rbg(rbg1, 1);
+         setup_windows();
+         for (int i = 0; i < L_COUNT; ++i) wctl[i] = wctl_of(i) & 0x8F;    // W0, W1, the logic
+         bk = ((uint32_t)(reg(0xAC) & 7) << 16 | reg(0xAE)) * 2;
+@@ -688,6 +696,7 @@ void vdp2_compose(Frame& f) {
+         }
+         back.rgb = rgb555(vw(bk + (bk_lines ? (uint32_t)y * 2 : 0)));
+         if (rbg.on) rbg_line(rbg, y);
++        if (rbg1.on) rbg_line(rbg1, y);
+         for (int x = 0; x < f.w; ++x) {
+             Pix l[L_COUNT];
+             int top = -1, second = -1;
+@@ -707,7 +716,17 @@ void vdp2_compose(Frame& f) {
+                 rp.ratio = rbg.ratio; rp.cc = special_cc(4, rbg.cc, rp); rp.offset = rbg.offset; rp.offset_b = rbg.offset_b;
+                 consider(L_RBG0);
+             }
+-            for (int n = 0; n < 4; ++n) {
++            // RBG1, when on, is shown in NBG0's place, and NBG0-NBG3 are not
++            if (rbg1.on) {
++                Pix& p = l[L_NBG0];
++                p = {};
++                if ((rbg1.prio || sfprmd & 3) && !(hide & 4) && !(wctl[L_NBG0] && windowed(wctl[L_NBG0], x, y))
++                    && rbg_pixel(rbg1, x, p) && (p.prio = special_prio(0, rbg1.prio, p))) {
++                    p.ratio = rbg1.ratio; p.cc = special_cc(0, rbg1.cc, p); p.offset = rbg1.offset; p.offset_b = rbg1.offset_b;
++                    consider(L_NBG0);
++                }
++            }
++            for (int n = 0; n < 4 && !rbg1.on; ++n) {
+                 Pix& p = l[L_NBG0 + n];
+                 p = {};
+                 const Nbg& s = nbg[n];
 diff --git a/runtime/video.cpp b/runtime/video.cpp
-index 55c80cb..8ac7bcd 100644
+index 55c80cb..73d6ae5 100644
 --- a/runtime/video.cpp
 +++ b/runtime/video.cpp
 @@ -41,6 +41,10 @@ static void set16(uint8_t* r, uint32_t o, uint16_t v) { r[o] = v >> 8; r[o + 1]
@@ -173,3 +913,34 @@ index 55c80cb..8ac7bcd 100644
      if (!host_open()) sat_fatal("no window");
  }
  
+@@ -73,22 +77,25 @@ static void vblank_in(uint64_t now) {
+     if (listed(g_cfg.dump, n)) dump("", g_vblanks);
+     bool shot = listed(g_cfg.shots, n);
+     bool compose = shot || host_wants_frame();
++#ifdef SATURNKIT_PROF
++    compose = true;                 // time the composing a window would do
++#endif
+     if (vdp1_interp_field(compose) && compose) {
+         uint8_t saved[0x30];
+         std::copy(g_vdp2_regs + 0x70, g_vdp2_regs + 0xA0, saved);
+         vdp1_interp_scroll(g_vdp2_regs + 0x70);
+-        vdp2_compose(g_frame);
++        { SAT_PROF(6); vdp2_compose(g_frame); }
+         std::copy(saved, saved + 0x30, g_vdp2_regs + 0x70);
+         if (shot) write_png(g_cfg.out + "/shot-" + n + ".png", g_frame);
+-        host_present(g_frame);
++        { SAT_PROF(7); host_present(g_frame); }
+     } else if (compose) {
+-        vdp2_compose(g_frame);
++        { SAT_PROF(6); vdp2_compose(g_frame); }
+         if (shot) write_png(g_cfg.out + "/shot-" + n + ".png", g_frame);
+-        host_present(g_frame);
++        { SAT_PROF(7); host_present(g_frame); }
+     }
+     scu_raise(IRQ_VBLANK_IN);
+     scu_frame_event(0);
+-    host_pace(now);
++    { SAT_PROF(8); host_pace(now); }
+ }
+ 
+ uint64_t video_next_line(uint64_t now) {

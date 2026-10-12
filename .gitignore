@@ -14,3 +14,9 @@
 extracted/
 pc/
 saturn/
+
+# ripped CD audio, built DLLs, local test output
+*.wav
+pcwin/music/
+*.dll
+*.png
