@@ -714,3 +714,112 @@
 0x0041b05c func bilstyring_RateLoop hand xalign label kept, now explained: 329 b = DOS bilstyring_RateLoop 00029d71 (45 b, the player / AI dispatch) + car_PlayerDriveStep 00029d9f (283 b) unsplit, so the body is the player drive step (car_PullSharedState, car_Respawn, car_EngineSoundMix, car_UpdateTilt, car_EmitSmoke, car_ReadInputApply ...); callees car_AIDriveStep for the AI path (NOTES pass 126 mislabel resolved)
 0x004204a6 func menu_ClearRows hand xalign label kept, now explained: 185 b = DOS menu_ClearRows 0002f120 (83 b) + menu_BlitRleRows 0002f173 (102 b) unsplit; callees blit_RleRowFull15 / blit_RleRowClip15 belong to the blit half (NOTES pass 140 check resolved)
 0x004207d1 func menu_DrawRows2 hand xalign label kept, now explained: 165 b = DOS menu_DrawRows2 0002f44b (89 b) + menu_BlitRleRowsOver 0002f4a4 (76 b) unsplit; callees blit_RleRowOver15 / blit_RleRowOverClip15 belong to the blit half
+0x00401099 func far_FatalMCExit hand DB4 SCORWIN twin of scordos 00010099 far_FatalMCExit; sys_Fatal("MC_EXIT") only; same size as DOS
+0x004010aa func far_DbgPrintf hand DB4 SCORWIN twin of scordos 000100aa far_DbgPrintf; dbg_Printf("test %d,%d,%d") only
+0x00401238 func x87_RoundToInt hand DB4 SCORWIN twin of scordos 00010238 x87_RoundToInt; __CHP + ROUND float to int, 51 b both
+0x004016e2 func col_WorldToLocalAtTime hand DB4 SCORWIN twin of scordos 000106e2 col_WorldToLocalAtTime; (1-t) via 0x10000-param, fixmul with obj+0x98 record vel, then vec_ToLocal; 114 b both
+0x0040197c func mat_RotateRowsByAngles hand DB4 SCORWIN twin of scordos 0001097c mat_RotateRowsByAngles; loop of vec_RotateByAngles over 3 rows at obj+0x5c step 0xc; 13 b like DOS
+0x004019d8 func mat_RotateColsByAngles hand DB4 SCORWIN twin of scordos 000109d8 mat_RotateColsByAngles; loop of vec_RotateByAngles over 3 cols at obj+0x5c step 4; 13 b
+0x00401ab1 func math_SelfTest hand DB4 SCORWIN twin of scordos 00010ab1 math_SelfTest; debug test: fixmul/fixmuldiv/vec_RotateByAngles/vec_DirToAngles/trig_Sin/Cos/Atan2 with dbg_Printf "muldiv","rot","sin/cos","ang" then sys_Fatal "math test"; DOS 380 b
+0x00401c2d func asm_CallPacked4 hand DB4 SCORWIN twin of scordos 00010c2d asm_CallPacked4; ORs 4 shifted bytes (<<8,<<16,<<24) into one dword then jumps through a far thunk; 346-byte decompile block is just the small body
+0x00401c4b func dbg_PrintfMatrix hand DB4 SCORWIN twin of scordos 00010c4b dbg_PrintfMatrix; 3x dbg_Printf "Matrix : %8x,%8x,%8x" rows
+0x00401d17 func dbg_PrintMatrix3 hand DB4 SCORWIN twin of scordos 00010d17 dbg_PrintMatrix3; 3x dbg_Printf matrix rows (same string at 0043a133), sibling of dbg_PrintMatrix
+0x00401d88 func x87_RoundToInt2 hand DB4 SCORWIN twin of scordos 00010d88 x87_RoundToInt2; __CHP + ROUND, 44 b both
+0x00401db4 func x87_RoundToInt3 hand DB4 SCORWIN twin of scordos 00010db4 x87_RoundToInt3; rt_fprem + __CHP + ROUND, 30 b both
+0x00401dd2 func dbg_PrintfThunk hand DB4 SCORWIN twin of scordos 00010dd2 dbg_PrintfThunk; single dbg_Printf thunk (68 b body); DOS sibling thunk
+0x00401e16 func str_End hand DB4 SCORWIN twin of scordos 00010e16 str_End; strlen-like scan to NUL, returns pointer at terminator; 23 b both
+0x00401e2d func dbg_ListTextAt hand DB4 SCORWIN twin of scordos 00010e2d dbg_ListTextAt; walks list via +4 then dbg_TextAt("free blocks, len = %d, %d"); 60 b both
+0x00401e69 func nop_10e69 hand DB4 SCORWIN twin of scordos 00010e69 nop_10e69; empty stub (only __CHK), 11 b; kept DOS name nop_<DOS addr> per existing nop_10754 convention
+0x00401e74 func nop_10e74 hand DB4 SCORWIN twin of scordos 00010e74 nop_10e74; empty stub (only __CHK), 11 b; kept DOS name per nop_10754 convention
+0x00402bd2 func struct_CheckTable hand DB4 SCORWIN twin of scordos 00011be5 struct_CheckTable; loops DAT_004572e8 table (+4 count, +0xc array) and dbg_Printf "line %d symbol %s" for non-zero entries; 67 b = DOS dbg_PrintTableNonZero 19 + struct_CheckTable 48 (string is in struct_CheckTable)
+0x00402c15 func struct_DebugPrintNode hand DB4 SCORWIN twin of scordos 00011c15 struct_DebugPrintNode; sprintf "%s %d %d %d" padded to 0x20 cols then "copydats" lines; struct node print, 300 b vs DOS 294
+0x00402d3b func struct_DebugPrintList hand DB4 SCORWIN twin of scordos 00011d3b struct_DebugPrintList; recursive walk of sibling (+0x14)/child (+0x10) nodes calling FUN_00402c15 (struct_DebugPrintNode) with indent +8; 61 b both
+0x004035af func ext_DumpLinksFatal hand DB4 SCORWIN twin of scordos 000125af ext_DumpLinksFatal; dbg_Printf "ReAllocLinks %s %d" loop over DAT_00457064+0x14c chain then sys_Fatal "penal"; 132 b both
+0x00403633 func struct_DebugPrintTree hand DB4 SCORWIN twin of scordos 00012633 struct_DebugPrintTree; calls struct_DebugPrintNode on root (*(obj-4)+0xc) then struct_DebugPrintList on children; 40 b both
+0x00403fa8 func ctx_FreeAll hand DB4 SCORWIN twin of scordos 00012fa8 ctx_FreeAll; while DAT_00457064: mem_FreeRaw chain (frees context stack); 48 b both
+0x00404278 func nop_13278 hand DB4 SCORWIN twin of scordos 00013278 nop_13278; empty stub (only __CHK), 11 b
+0x0040487b func spr_BlitScaledShade15B hand DB4 SCORWIN twin of scordos 0001387b spr_BlitScaledShade15B; texture scaled blit with shade table, 647 b = DOS 1387b 292 + _even 78 + junk 8 + _loop 221 + stub 8 (Ghidra did not split WIN); 16-bit shade lookups, flip flags bit0/bit1
+0x00404eb4 func spr_BlitScaledShade15 hand DB4 SCORWIN twin of scordos 00013eb4 spr_BlitScaledShade15; scaled blit with shade, 670 b = DOS spr_BlitScaledShade15 434 + _loop 236 (merged in WIN); flip flags bit0/bit1, 16.16 steps
+0x00405152 func spr_BlitScaledShadeMap15 hand DB4 SCORWIN twin of scordos 00014152 spr_BlitScaledShadeMap15; scaled blit with shade map, 651 b both; same param block layout as 00404eb4
+0x004056cd func fill16_White hand DB4 SCORWIN twin of scordos 000146cd fill16_White; fills count shorts with 0x7fff (white 15-bit); 32 b both
+0x00406ffc func tex_ClearNodePrios hand DB4 SCORWIN twin of scordos 00016004 tex_ClearNodePrios; loops DAT_00457064+0x110..0x114 array, writes 0 at (*p)+4; 51 b = DOS ctx_ClearSlotLinks 5 + tex_ClearNodePrios 43 (loop part named)
+0x00407a40 func dbg_KeySetCamMark hand DB4 SCORWIN twin of scordos 00016a40 dbg_KeySetCamMark; if byte (DAT_004571e0+0x46) set, wl3_ObjRoutDat then writes camera pos to PTR_DAT_0043e998 +0xb4..0xd4 (z-640000); debug key cam mark
+0x00408401 func rnd_Next16 hand DB4 SCORWIN twin of scordos 00017401 rnd_Next16; returns table[idx*2] ushort from PTR_DAT_00456200, idx = _DAT_00457010++ & 0x1ff; 53 b both
+0x00408436 func nop_17436 hand DB4 SCORWIN twin of scordos 00017436 nop_17436; empty stub (only __CHK), 11 b
+0x00408441 func far_Fatal hand DB4 SCORWIN twin of scordos 00017441 far_Fatal; sys_Fatal(param string); 16 b both
+0x00408451 func track_BuildRangeTable hand DB4 SCORWIN twin of scordos 00017451 track_BuildRangeTable; builds range table: sums counts, mem_AllocRaw(n*0x10+8) stored at DAT_00457064+0x140, min/max per row; 506 b DOS vs 506 body here
+0x00409270 func fx_DebrisPoly hand DB4 SCORWIN twin of scordos 0001826b fx_DebrisPoly; debris poly update: resets matrix when two shorts equal (mat_RotateEuler), loops 3 points with x87_Store3Ints, +0x300 to counter; 245 b both
+0x0040a9d6 func mat_RotateDouble3 hand DB4 SCORWIN twin of scordos 000199d1 mat_RotateDouble3; 3x3 short matrix times double vector * _DAT_0043ab3f; 209 b both
+0x0040aaa7 func vecd_Cross hand DB4 SCORWIN twin of scordos 00019aa2 vecd_Cross; double cross product of two 3-vectors into three out pointers; sz 91 vs DOS 91
+0x0040c1f6 func mesh_CullPolys hand DB4 SCORWIN twin of scordos 0001b1f1 mesh_CullPolys; poly cull with frustum: poly_FrustumTest per poly, builds index lists; falls back to mesh_CullPolysBackface when flag &2 clear; 353 b both
+0x0040c8c6 func mesh_ProjectCulledVertsFloat hand DB4 SCORWIN twin of scordos 0001b8e4 mesh_ProjectCulledVertsFloat; loop objects count +0x14: __CHP/ROUND floats, mulhi32 into short xyz triples (+offset); float version of DOS 588 b routine, 623 b here
+0x0040d58d func nop_1c588 hand DB4 SCORWIN twin of scordos 0001c588 nop_1c588; empty stub (only __CHK), 11 b
+0x0041003a func be32_Load hand DB4 SCORWIN twin of scordos 0001f036 be32_Load; big-endian dword read with bswap done by shifts; 64 b both
+0x00410eac func tab_BuildAdd5 hand DB4 SCORWIN twin of scordos 0001fea8 tab_BuildAdd5; mem_AllocRaw 0x800 table 32x32 shorts = min(i+j,31) add table; 103 b both (DOS tab_BuildAdd5)
+0x00410f13 func atab_AllocTable1 hand DB4 SCORWIN twin of scordos 0001ff0f atab_AllocTable1; mem_AllocRaw 0x800, 32x32 shorts = max(i-j,0) (subtract table); 93 b = DOS atab_AllocTable1 56 + _loop 25 + atab_InitTable1 12 merged; name is DOS one though table is subtract
+0x0041158b func blit_DoubleWidth16 hand DB4 SCORWIN twin of scordos 0002050f blit_DoubleWidth16; copy rows duplicating each 16-bit pixel to 2 (double width); stride params; 82 b both
+0x004115dd func blit_LookupRows16to24 hand DB4 SCORWIN twin of scordos 00020587 blit_LookupRows16to24; rows of 16-bit index -> 32-bit palette lookup stored at 3-byte stride (16 to 24 bpp); 114 b = DOS blit_Rows16To24Table 38 + blit_LookupRows16to24 76
+0x00411a67 func list_FreeChain_bf9e8 hand DB4 SCORWIN twin of scordos 000209eb list_FreeChain_bf9e8; while DAT_00457270 chain: mem_Free node; 56 b vs DOS 53 b; DOS name carries odd suffix bf9e8, kept unchanged, purpose guess free-all linked list
+0x00412a24 func pic_DecodeRow8Raw hand DB4 SCORWIN twin of scordos 0002187c pic_DecodeRow8Raw; RLE row decode: zero runs and palette-mapped (DAT_00457278) byte runs, zero fill to width; 122 b = DOS pic_DecodeRow8Raw 98 + pic_ClearRowSetPal 24
+0x00412b16 func pic_DrawRows8Raw hand DB4 SCORWIN twin of scordos 0002196e pic_DrawRows8Raw; per-row call to FUN_00412a24 (row decode) over rows from offset table, skips -1 rows; 137 b vs DOS 143
+0x0041490d func pathrec_PackOrient hand DB4 SCORWIN twin of scordos 000236a2 pathrec_PackOrient; x87_Store3Ints then trig_Atan2, packs 4 bytes (angle>>8 and top bytes of 3 ints); 132 b vs DOS 132
+0x0041586c func obj_ScaleVelocityLocal hand DB4 SCORWIN twin of scordos 000245fe obj_ScaleVelocityLocal; vec_ToLocal, fixmul each velocity component (+0xc/+0x10/+0x14) by 3 scales, vec_ToWorld; 147 b vs DOS 155
+0x004168fb func car_GroundResponse2 hand DB4 SCORWIN twin of scordos 0002568d car_GroundResponse2; ground contact response using obj+0x98 record, state at +0x38/+0x3c, fixdot3, vec_Normalize; 470 b vs DOS 473; sibling of car_GroundResponse 00416be8
+0x00418461 func fxdust_Visible hand DB4 SCORWIN twin of scordos 000271f3 fxdust_Visible; spr_ProjectPoint then mulhi32 radius * scale vs DAT_004570ac, sets *obj=0xffff (invisible) if >0x4000; DOS 118 b
+0x00418cd0 func nop_27a62 hand DB4 SCORWIN twin of scordos 00027a62 nop_27a62; empty stub (only __CHK), 11 b
+0x00419692 func obj_FindBlockingOnSegment hand DB4 SCORWIN twin of scordos 00028424 obj_FindBlockingOnSegment; checks list (obj+0xa0 +0x10 via list_Begin/Next) for other objects within radius sum + half segment length of segment p1..p2 via vec_Length; returns 0 if blocked; 210 b both
+0x00419f4d func dbg_TrackMapTool hand DB4 SCORWIN twin of scordos 00028cdf dbg_TrackMapTool; debug track map tool: key_Released(0x35) then win_SaveFileDialog "Map Save Name", dbg_Printf "Saving: %s %d", bswap16_at, file_WriteBlock; 631 b vs DOS 628
+0x0041a1c4 func dbg_TrackMapEditor hand DB4 SCORWIN twin of scordos 0x28f53 dbg_TrackMapEditor: debug lane-map editor: OverWrite/Recording toggles keys 1/2, mappos, dbg_DrawTrackMap
+0x0041a397 func pathrec_Clear hand DB4 SCORWIN twin of scordos 0x29126 pathrec_Clear: *count=0 + memset 4000
+0x0041a3be func pathrec_DrawPath hand DB4 SCORWIN twin of scordos 0x2914d pathrec_DrawPath: walks path record points path_ReadPoint, fx_Spawn markers
+0x0041a4b4 func pathrec_Tick hand DB4 SCORWIN twin of scordos 0x29243 pathrec_Tick: debug AI path recorder per-frame: records pos into 0x459604 table (4000 max), calls pathrec_Save on key
+0x0041a71e func path_DumpRecords hand DB4 SCORWIN twin of scordos 0x294b9 path_DumpRecords: dbg_Printf "rec nr %d size %d" per record
+0x0041a76d func path_InsertRecord hand DB4 SCORWIN twin of scordos 0x294fc path_InsertRecord: builds NEWREC block with replaced/appended record
+0x0041a94d func path_ByteSwap hand DB4 SCORWIN twin of scordos 0x296d5 path_ByteSwap: bswap16_at/bswap32_at over whole path file
+0x0041aa83 func path_SaveFile hand DB4 SCORWIN twin of scordos 0x2980b path_SaveFile: "Saving: %s %d", file_WriteBlock, path_LoadFixup
+0x0041aafa func pathrec_Save hand DB4 SCORWIN twin of scordos 0x29882 pathrec_Save: win_RunRecordDialog + "Joy Save Name"; also contains DOS path_RecordFinish 29979 body (string "penis", NEWREC via path_InsertRecord) merged/inlined, 939 b vs 247+670
+0x0041afc3 func dbg_KeyTeleportFirstToObj hand DB4 SCORWIN twin of scordos 0x29cd8 dbg_KeyTeleportFirstToObj: list_Begin/list_Next then copies player pos to the object, 153 b both
+0x0041b738 func obj_SpinY256 hand DB4 SCORWIN twin of scordos 0x2a44d obj_SpinY256: vec_RotateByAngles on 3 rows of obj+0x5c (24 b both)
+0x0041b7d2 func obj_ApplySpinAngles hand DB4 SCORWIN twin of scordos 0x2a4e7 obj_ApplySpinAngles: calls matrix rotate (FUN_0040197c = DOS mat_RotateRowsByAngles) with obj+0x64/0x68/0x6c
+0x0041e552 func scboard_SpawnTimeDigits hand DB4 SCORWIN twin of scordos 0x2d1d5 scboard_SpawnTimeDigits: 8 fx_Spawn of digit x offsets over 0x140 / 200 screen, 733 b both
+0x0041e82f func scboard_SpawnResults hand DB4 SCORWIN twin of scordos 0x2d4b2 scboard_SpawnResults: mode==1 place digit at 0xc666,0x43d7 + 4 lap times via scboard_SpawnTimeDigits
+0x0041fe40 func img_Alloc8 hand DB4 SCORWIN twin of scordos 0x2eac0 img_Alloc8: mem_AllocRaw w*h+0x414
+0x0041fe9c func img_Blit32 hand DB4 SCORWIN twin of scordos 0x2eb19 img_Blit32: copies src rec into dst rec at (x,y) with stride diff
+0x0041feef func img_Alloc32 hand DB4 SCORWIN twin of scordos 0x2eb6c img_Alloc32: mem_AllocRaw w*h*4+0x10
+0x0041ff40 func img_Expand8To32 hand DB4 SCORWIN twin of scordos 0x2ebba img_Expand8To32: palette lookup per pixel into 32-bit
+0x0041ff7a func img_Convert32To15 hand DB4 SCORWIN twin of scordos 0x2ebf4 img_Convert32To15: 8-8-8 to 5-5-5
+0x0041ffe2 func img_Convert15To32 hand DB4 SCORWIN twin of scordos 0x2ec5c img_Convert15To32: 5-5-5 to 0x00RRGGBB
+0x0042003f func img_Alloc16 hand DB4 SCORWIN twin of scordos 0x2ecb9 img_Alloc16: mem_AllocRaw w*h*2+0xc
+0x00421cd7 func menu_Toggle6690Page hand DB4 SCORWIN twin of scordos 0x308b9 menu_Toggle6690Page: single toggle options page, hilite global 0043ea60 = DOS 000a6580 +0x38
+0x00421e0f func menu_RestoreSettingsRow hand DB4 SCORWIN twin of scordos 0x309f7 menu_RestoreSettingsRow: compares options block (0x98 bytes) to saved copy, hilite 0043ea64
+0x00421fc7 func menu_VideoModePage hand DB4 SCORWIN twin of scordos 0x30c24 menu_VideoModePage: ddraw_PopEnumMode mode list + menu_Draw3Way, 1961 b vs DOS 1756 b
+0x00422770 func menu_Option6630Page hand DB4 SCORWIN twin of scordos 0x31300 menu_Option6630Page: menu_Draw3Way 0xb6/0xfc/400, hilite 0043ea74
+0x00422918 func menu_CdTrackPage hand DB4 SCORWIN twin of scordos 0x314b4 menu_CdTrackPage: cd_PlayTrack on track change, 902 b both
+0x00422c9e func menu_SoundOptionsPage2 hand DB4 SCORWIN twin of scordos 0x3183a menu_SoundOptionsPage2: three toggles with cd_Stop/cd_PlayTrack, hilite 0043ea80 = DOS 65a0 +0x38; size differs (400 vs 810) so match by hilite offset
+0x00422fbd func menu_ModeSelectHandler hand DB4 SCORWIN twin of scordos 0x31b6b menu_ModeSelectHandler: cd_Stop, menu_Pop, menu_SetNext, 271 b both
+0x00423412 func menu_PlainPageHandler hand DB4 SCORWIN twin of scordos 0x31fc0 menu_PlainPageHandler: clear/draw rows only, 105 b both
+0x0042347b func keybind_FirstFree hand DB4 SCORWIN twin of scordos 0x32029 keybind_FirstFree: loops 20 defaults vs 8 bindings, sys_Fatal "fed pik"
+0x004234f5 func keybind_ClearIfSame hand DB4 SCORWIN twin of scordos 0x320a3 keybind_ClearIfSame: if binding==key replace (-1 -> keybind_FirstFree), menu_DrawText
+0x004235a4 func keybind_ClearDuplicates hand DB4 SCORWIN twin of scordos 0x32152 keybind_ClearDuplicates: 8x keybind_ClearIfSame
+0x0042427e func menu_LevelSelectPage hand DB4 SCORWIN twin of scordos 0x32e40 menu_LevelSelectPage: menu_ScrollSelector level pick, 818 b both
+0x004245b0 func menu_RecordsPage hand DB4 SCORWIN twin of scordos 0x33172 menu_RecordsPage: best-times page, menu_DrawTimesTable
+0x00424839 func menu_RecordsPage_thunk hand DB4 SCORWIN twin of scordos 0x333fb menu_RecordsPage_thunk: thunk calling menu_RecordsPage (23 b)
+0x00424850 func menu_RecordsPage_thunk2 hand DB4 SCORWIN twin of scordos 0x33412 menu_RecordsPage_thunk2: thunk calling menu_RecordsPage (15 b)
+0x0042510b func blit_SampleRow8 hand DB4 SCORWIN twin of scordos 0x33cd3 blit_SampleRow8: out[i]=table[(src16[u>>16]&0x7fff)+base], 61 b both
+0x00425244 func menu_SoundOptionsPage hand DB4 SCORWIN twin of scordos 0x33e0c menu_SoundOptionsPage: three toggles, cd_Stop/cd_PlayTrack, hilite 0043ea98 = DOS 65b8 +0x38
+0x0042549a func menu_RowBackHandler hand DB4 SCORWIN twin of scordos 0x34099 menu_RowBackHandler: 201 b = DOS menu_ResetHilite 34074 (37) + menu_RowBackHandler (164) merged; row 0 menu_Pop, row 4 pop twice + "title"
+0x00425563 func menu_ViewOptionsPage hand DB4 SCORWIN twin of scordos 0x3413d menu_ViewOptionsPage: menu_Draw3Way 0xbe/0x106/0x143 + two inverted toggles, hilite 0043eaa8
+0x00432343 func mem_ResetMarks hand DB4 SCORWIN twin of scordos 0x4065f mem_ResetMarks: zeroes 3 counters and reads clock (61 b both); win timer table DAT_00468354; twin only by size/shape
+0x00432380 func dbg_ShowTimers320 hand DB4 SCORWIN twin of scordos 0x40415 dbg_ShowTimers320: "frmrate" + "tid %-16s" text lines (win version, 56 b vs DOS 219); name from existing win comment
+0x00433986 func rt_FpremThunk hand DB4 no DOS twin: 16 b thunk calling rt_fprem
+0x00433fc8 func rt_FloatToFixedBitsThunk hand DB4 no DOS twin: 16 b thunk calling rt_FloatToFixedBits 00433e72 (16 b)
+0x00435424 func rt_ExpPrefix hand DB4 no DOS twin: x87 stub right before rt_ExpCore: compare st0 vs DAT_00456328, ROUND, f2xm1, fscale (exp body); cautious name
+0x0043548e func rt_ExpThunk hand DB4 no DOS twin: thunk calling 0043542c (exp core entry)
+0x00437c95 func rt_FloatCmpZeroThunk hand DB4 no DOS twin: thunk calling rt_FloatCmpZero
+0x00437ca1 func rt_Thunk_00437ca1 hand DB4 no DOS twin: thunk calling 00437c81 (unknown math helper next to rt_FloatCmpZero); cautious
+0x00438aba func rt_AllocStreamNode hand DB4 no DOS twin: Watcom CRT, takes a free FILE slot of static table 004564a4 (0x1a each) else rt_malloc, links on DAT_0046abb8; counterpart of rt_ReleaseStreamNode
+0x00401e7f func dbg_DrawHeapBar hand DB4 = DOS dbg_DrawHeapBar 00010e7f (push 0x2d8 __CHK prologue): a 320-short row buffer filled with a colour, marks each heap block span in another colour, copies the row 5 times into the screen at DAT_004570a4
+0x00423ac8 func menu_KeyBindPageTail hand DB4 no refs in SCORWIN (dead): DOS twin is the in-body block 0x32678 of menu_KeyBindingPage; when no menu is open and key byte +0xd of DAT_004571e0 is 1, opens the menu (menu_DrawRowsClipX 0xeb, 0x280); clears DAT_0045d858 when keys +8/+0xd/+0x1b/+0x26/+0x28 are all up
+0x00434118 func rt_GetThreadDataDA hand DB4 Watcom CRT: returns __GetThreadPtr (PTR_rt_GetThreadPtrDefault_00456240) + 0xda, the per-thread field used by rt_InitThreadData
+0x004371ce func rt_GetConsoleHandlesInit hand DB4 Watcom CRT: rt_OpenConsoleHandles then returns DAT_00456488
+0x00438a4f func rt_SetErrnoFromRc hand DB4 Watcom CRT (value, rc): rc 0 returns value; else maps the OS code (0x7b -> 1, 0xce -> 9, 0xb7 -> 7, else table DAT_004566b5 clamped at 0x13) through rt_SetErrno and returns -1; sibling of rt_SetErrnoFromWin32
