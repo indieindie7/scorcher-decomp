@@ -11,6 +11,7 @@ SDL3_DIR="$HERE/deps/sdl3-dl/SDL3-3.4.18/cmake"
   -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang \
   -DCMAKE_BUILD_TYPE=Release \
   -DSDL3_DIR="$SDL3_DIR" \
+  -DSATURNKIT_EXTRA="$HERE/game/scorcher.cmake" \
   -DCMAKE_CXX_FLAGS="-I$HERE/deps/khronos -DNOMINMAX -D_CRT_SECURE_NO_WARNINGS" \
   -DCMAKE_C_FLAGS="-I$HERE/deps/khronos"
 "$NJ" -C "$HERE/build/recomp-build" "$@"

@@ -20,6 +20,9 @@ Non-commercial, done for study and preservation.
 | `ghidra/x86watcom.cspec` | compiler spec for the Watcom register calling convention |
 | `ghidra/scripts/*.java` | headless Ghidra scripts: find function starts, repair bodies, apply names, export, dump decompilation |
 | `ghidra/decomp/*.c` | decompiler dumps of selected routines (routine table, wl3 loaders) |
+| `pcwin/` | SCORWIN on Windows 11: our own `ddraw.dll` proxy (`ddraw/ddraw.c`) with options overlay, CD music from WAV, and the paused Manx TT bike import (`MANX-IMPORT.md`: what was built, collider findings, open bugs) |
+| `native/` | native build work (`HANDOFF-native.md`); `game/manx_bike.h` = Manx TT bike model reimplemented from the manxtt-decomp study |
+| `physics_compare.md`, `bike_physics_papers.md` | handling comparison of Scorcher / Manx TT / other racers, and bike dynamics papers |
 | `tools/*.py` | ISO / MEG / wl3 extractors, LE flattener, Watcom OMF signature builder, cross-build aligner |
 
 Line format of the hand files: `0x<addr> func <name> hand <comment>`. The comment describes the body,

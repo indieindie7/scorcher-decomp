@@ -1,12 +1,12 @@
 """Extract the ISO 9660 data track from a raw MODE1/2352 (or 2048) image into a directory.
-usage: isoextract.py <image> <outdir> [sector_size]
+usage: isoextract.py <image> <outdir> [sector_size] [header bytes: 16 MODE1, 24 MODE2 form 1]
 """
 import os, struct, sys
 
 def main():
     img, out = sys.argv[1], sys.argv[2]
     ss = int(sys.argv[3]) if len(sys.argv) > 3 else 2352
-    hdr = 16 if ss == 2352 else 0
+    hdr = int(sys.argv[4]) if len(sys.argv) > 4 else (16 if ss == 2352 else 0)
     f = open(img, "rb")
     def sector(n):
         f.seek(n * ss + hdr); return f.read(2048)
